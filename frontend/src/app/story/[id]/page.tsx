@@ -17,7 +17,6 @@ export default function StoryPlayerPage() {
   const { user } = useAuth();
   const { isSaved, toggleSaved, recordRecent } = useReadingLibrary();
   const [togglingBookmark, setTogglingBookmark] = useState(false);
-  const [castExpanded, setCastExpanded] = useState(false);
 
   const player = useStoryPlayer({ storyId: storyId || "" });
 
@@ -67,6 +66,8 @@ export default function StoryPlayerPage() {
     currentPage: player.currentPage,
     totalPages: player.story.total_pages,
     nextPageStatus: player.nextPageStatus,
+    canPlay: player.canPlay,
+    pageLoading: player.pageLoading,
     onTogglePlay: player.togglePlay,
     onSeek: player.seekTo,
     onPrev: () => player.goToPage(player.currentPage - 1),
@@ -75,18 +76,18 @@ export default function StoryPlayerPage() {
 
   return (
     <>
-      {/* Extra bottom padding on mobile for fixed player bar */}
-      <main className="pt-[140px] pb-[220px] md:pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
+      <main className="pt-[140px] pb-32 lg:pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
         <audio
-          ref={player.audioRef}
+          ref={player.bindAudioElement}
           onTimeUpdate={player.handleTimeUpdate}
           onEnded={player.handleEnded}
-          onPlay={() => {}}
-          onPause={() => {}}
+          onPlay={player.handlePlay}
+          onPause={player.handlePause}
           preload="auto"
+          playsInline
         />
 
-        <header className="flex items-start justify-between gap-6 mb-6">
+        <header className="flex items-start justify-between gap-6 mb-8">
           <div className="min-w-0">
             <Link
               href="/library"
@@ -105,7 +106,7 @@ export default function StoryPlayerPage() {
                 <button
                   onClick={handleToggleBookmark}
                   disabled={togglingBookmark}
-                  className="w-11 h-11 flex items-center justify-center text-primary hover:scale-110 transition-transform disabled:opacity-50 shrink-0"
+                  className="text-primary hover:scale-110 transition-transform disabled:opacity-50 shrink-0"
                   aria-label={
                     isSaved(storyId) ? "Remove bookmark" : "Add bookmark"
                   }
@@ -118,26 +119,6 @@ export default function StoryPlayerPage() {
             </div>
           </div>
         </header>
-
-        {/* Mobile: collapsible Cast chip */}
-        <div className="lg:hidden mb-4">
-          <button
-            onClick={() => setCastExpanded((p) => !p)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full glass-panel bg-surface/60 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors min-h-[44px]"
-            aria-expanded={castExpanded}
-          >
-            <span className="material-symbols-outlined text-[18px]">groups</span>
-            Cast
-            <span className="material-symbols-outlined text-[18px]">
-              {castExpanded ? "expand_less" : "expand_more"}
-            </span>
-          </button>
-          {castExpanded && (
-            <div className="mt-3">
-              <CharacterPanel characters={player.characters} />
-            </div>
-          )}
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-card-gap">
           <div className="lg:col-span-8 flex flex-col gap-card-gap">
@@ -154,17 +135,26 @@ export default function StoryPlayerPage() {
                 <StoryText
                   words={player.words}
                   activeIndex={player.activeWordIndex}
+                  fallbackText={
+                    player.pageData?.raw_segments
+                      ?.map((s) => s.text)
+                      .join(" ") ?? undefined
+                  }
                 />
               )}
             </motion.div>
 
-            {/* Desktop: PlayerControls inline */}
+            {player.playError && (
+              <p className="text-center font-label-sm text-label-sm text-error mb-2">
+                {player.playError}
+              </p>
+            )}
+
             <div className="hidden lg:block">
               <PlayerControls {...playerControlsProps} />
             </div>
           </div>
 
-          {/* Desktop: sidebar */}
           <div className="hidden lg:flex lg:col-span-4 flex-col gap-card-gap">
             <CharacterPanel characters={player.characters} />
             <PageGrid
@@ -175,7 +165,6 @@ export default function StoryPlayerPage() {
           </div>
         </div>
 
-        {/* Mobile: PageGrid below text */}
         <div className="lg:hidden mt-card-gap">
           <PageGrid
             currentPage={player.currentPage}
@@ -185,7 +174,6 @@ export default function StoryPlayerPage() {
         </div>
       </main>
 
-      {/* Mobile: fixed player controls at bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-40 px-container-padding-mobile pb-4 lg:hidden">
         <PlayerControls {...playerControlsProps} />
       </div>

@@ -1,6 +1,7 @@
 import asyncio
 from typing import Optional
 
+import httpx
 from supabase import create_client, Client
 from elevenlabs.client import ElevenLabs
 import vertexai
@@ -76,25 +77,71 @@ def get_gemini() -> GenerativeModel:
 elevenlabs_semaphore = asyncio.Semaphore(settings.elevenlabs_max_concurrent)
 
 
-async def get_current_user(authorization: str | None = Header(None)) -> dict | None:
-    """Decode Supabase JWT. Returns {"user_id": ..., "role": ...} or None if no/invalid token."""
-    if not authorization or not authorization.startswith("Bearer "):
+async def _verify_token_via_supabase_auth(token: str) -> str | None:
+    """Validate access token with Supabase Auth (works with symmetric and asymmetric JWTs)."""
+    cfg = get_settings()
+    if not cfg.supabase_url:
         return None
-    token = authorization.split(" ", 1)[1]
+    api_key = cfg.supabase_service_role_key or cfg.supabase_anon_key
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{cfg.supabase_url.rstrip('/')}/auth/v1/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "apikey": api_key,
+                },
+            )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("id")
+    except Exception as exc:
+        print(f"[auth] Supabase /auth/v1/user failed: {exc}")
+        return None
+
+
+def _verify_token_via_jwt_secret(token: str) -> str | None:
+    """Legacy HS256 verification when SUPABASE_JWT_SECRET is configured."""
     secret = get_settings().supabase_jwt_secret
     if not secret:
         return None
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
-        user_id = payload.get("sub")
-        if not user_id:
-            return None
-        sb = get_supabase()
-        profile = sb.table("user_profiles").select("role").eq("user_id", user_id).execute()
-        role = profile.data[0]["role"] if profile.data else "user"
-        return {"user_id": user_id, "role": role}
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+            options={"verify_aud": True},
+        )
+        return payload.get("sub")
     except JWTError:
         return None
+
+
+async def _resolve_user_role(user_id: str) -> str:
+    sb = get_supabase()
+    profile = sb.table("user_profiles").select("role").eq("user_id", user_id).execute()
+    return profile.data[0]["role"] if profile.data else "user"
+
+
+async def get_current_user(authorization: str | None = Header(None)) -> dict | None:
+    """Validate Supabase access token. Returns {"user_id": ..., "role": ...} or None."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None
+
+    user_id = await _verify_token_via_supabase_auth(token)
+    if not user_id:
+        user_id = _verify_token_via_jwt_secret(token)
+    if not user_id:
+        return None
+
+    role = await _resolve_user_role(user_id)
+    return {"user_id": user_id, "role": role}
 
 
 async def get_required_user(authorization: str | None = Header(None)) -> dict:

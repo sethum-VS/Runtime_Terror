@@ -15,13 +15,15 @@ const API_URL = "";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   if (typeof window === "undefined") return {};
-  try {
-    const { getSupabaseClient } = await import("./supabaseClient");
-    const supabase = getSupabaseClient();
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (token) return { Authorization: `Bearer ${token}` };
-  } catch {}
+  const { getSupabaseClient } = await import("./supabaseClient");
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.warn("[api] getSession failed:", error.message);
+    return {};
+  }
+  const token = data.session?.access_token;
+  if (token) return { Authorization: `Bearer ${token}` };
   return {};
 }
 

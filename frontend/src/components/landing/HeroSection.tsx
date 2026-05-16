@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import type { StoryStatus } from "@/lib/types";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ const STATUS_ORDER: StoryStatus[] = [
 
 export function HeroSection() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -34,6 +36,10 @@ export function HeroSection() {
 
   const handleFile = async (file: File) => {
     setError(null);
+    if (!authLoading && !user) {
+      router.push("/auth/sign-in");
+      return;
+    }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Please upload a PDF file");
       return;
@@ -70,7 +76,13 @@ export function HeroSection() {
       }, 2000);
     } catch (e) {
       setUploading(false);
-      setError(e instanceof Error ? e.message : "Upload failed");
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      if (msg.includes("401")) {
+        setError("Please sign in to upload stories.");
+        router.push("/auth/sign-in");
+        return;
+      }
+      setError(msg);
     }
   };
 
