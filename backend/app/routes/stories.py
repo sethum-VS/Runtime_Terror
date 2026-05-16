@@ -1,7 +1,7 @@
 import asyncio
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 
-from app.dependencies import get_supabase
+from app.dependencies import get_supabase, get_current_user, get_required_user
 from app.services.pdf_converter import convert_pdf_to_markdown
 from app.services.story_parser import parse_story
 from app.models.schemas import StoryResponse, CharacterResponse
@@ -13,7 +13,10 @@ MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.post("/stories/upload", response_model=StoryResponse)
-async def upload_story(file: UploadFile = File(...)):
+async def upload_story(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_required_user),
+):
     """Upload a PDF file and start the parsing pipeline in the background."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are accepted")
@@ -37,6 +40,7 @@ async def upload_story(file: UploadFile = File(...)):
         "title": file.filename.rsplit(".", 1)[0],
         "original_text": md_text,
         "status": "uploaded",
+        "user_id": user["user_id"],
     }
     try:
         result = supabase.table("stories").insert(story_data).execute()
@@ -55,6 +59,8 @@ async def upload_story(file: UploadFile = File(...)):
         title=story["title"],
         status=story["status"],
         total_pages=story.get("total_pages") or 0,
+        is_showcase=story.get("is_showcase", False),
+        user_id=story.get("user_id"),
     )
 
 
@@ -66,7 +72,6 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
 
         parsed = await parse_story(md_text)
 
-        # Save characters
         for char in parsed.get("characters", []):
             char_id = char.get("character_id", "char_unknown")
             supabase.table("characters").insert({
@@ -80,7 +85,6 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
                 "gender": char.get("gender", "other"),
             }).execute()
 
-        # Save pages
         for page in parsed.get("pages", []):
             supabase.table("story_pages").insert({
                 "story_id": story_id,
@@ -89,14 +93,12 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
                 "raw_segments": page.get("segments", []),
             }).execute()
 
-        # Update story
         supabase.table("stories").update({
             "status": "parsed",
             "total_pages": len(parsed["pages"]),
             "title": parsed.get("title") or "Untitled",
         }).eq("id", story_id).execute()
 
-        # Continue pipeline: profile + generate page 1
         await _run_profiling(story_id)
 
     except Exception as e:
@@ -146,19 +148,28 @@ async def profile_story(story_id: str):
 
 
 @router.get("/stories/{story_id}", response_model=StoryResponse)
-async def get_story(story_id: str):
+async def get_story(
+    story_id: str,
+    user: dict | None = Depends(get_current_user),
+):
     """Get story status and metadata."""
     supabase = get_supabase()
     result = supabase.table("stories").select("*").eq("id", story_id).execute()
     if not result.data:
         raise HTTPException(404, "Story not found")
     story = result.data[0]
+
+    if not story.get("is_showcase") and (not user or story.get("user_id") != user["user_id"]):
+        raise HTTPException(403, "Access denied")
+
     return StoryResponse(
         id=story["id"],
         title=story["title"],
         status=story["status"],
         total_pages=story.get("total_pages") or 0,
         error_message=story.get("error_message"),
+        is_showcase=story.get("is_showcase", False),
+        user_id=story.get("user_id"),
     )
 
 
@@ -181,14 +192,43 @@ async def get_characters(story_id: str):
 
 
 @router.get("/stories")
-async def list_stories():
-    """List all stories (for My Library page)."""
+async def list_stories(user: dict | None = Depends(get_current_user)):
+    """List stories visible to the current user."""
     supabase = get_supabase()
-    result = (
-        supabase.table("stories")
-        .select("id, title, status, total_pages, created_at")
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
-    )
+    if user:
+        result = (
+            supabase.table("stories")
+            .select("id, title, status, total_pages, is_showcase, user_id, created_at")
+            .or_(f"user_id.eq.{user['user_id']},is_showcase.eq.true")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+    else:
+        result = (
+            supabase.table("stories")
+            .select("id, title, status, total_pages, is_showcase, user_id, created_at")
+            .eq("is_showcase", True)
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
     return result.data or []
+
+
+@router.post("/stories/{story_id}/showcase")
+async def toggle_showcase(
+    story_id: str,
+    user: dict = Depends(get_required_user),
+):
+    """Admin-only: mark a story as showcase."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+
+    supabase = get_supabase()
+    result = supabase.table("stories").select("id").eq("id", story_id).execute()
+    if not result.data:
+        raise HTTPException(404, "Story not found")
+
+    supabase.table("stories").update({"is_showcase": True}).eq("id", story_id).execute()
+    return {"status": "showcase_enabled", "story_id": story_id}

@@ -20,9 +20,13 @@ export function getCharacterColor(characterId: string, allIds: string[]): string
 
 interface CharacterPanelProps {
   characters: Character[];
+  activeCharacterId?: string | null;
 }
 
-export function CharacterPanel({ characters }: CharacterPanelProps) {
+export function CharacterPanel({
+  characters,
+  activeCharacterId,
+}: CharacterPanelProps) {
   const allIds = characters.map((c) => c.character_id);
 
   return (
@@ -31,25 +35,57 @@ export function CharacterPanel({ characters }: CharacterPanelProps) {
         Cast
       </p>
       <ul className="space-y-3">
-        {characters.map((c) => (
-          <li key={c.character_id} className="flex items-center gap-3">
-            <span
-              className="w-3 h-3 rounded-full shrink-0"
-              style={{ backgroundColor: getCharacterColor(c.character_id, allIds) }}
-              aria-hidden
-            />
-            <div className="min-w-0 flex-1">
-              <p className="font-title-lg text-[16px] leading-tight text-primary truncate">
-                {c.name}
-              </p>
-              {c.role && (
-                <p className="font-label-sm text-label-sm text-on-surface-variant capitalize">
-                  {c.role}
+        {characters.map((c) => {
+          const color = getCharacterColor(c.character_id, allIds);
+          const isSpeaking = activeCharacterId === c.character_id;
+          return (
+            <li
+              key={c.character_id}
+              className={`flex items-center gap-3 rounded-lg px-2 py-1.5 transition-all duration-200 ${
+                isSpeaking
+                  ? "bg-primary/8 ring-1 ring-primary/20"
+                  : ""
+              }`}
+            >
+              <span
+                className={`shrink-0 rounded-full transition-all duration-200 ${
+                  isSpeaking ? "w-4 h-4 shadow-md" : "w-3 h-3"
+                }`}
+                style={{
+                  backgroundColor: color,
+                  boxShadow: isSpeaking ? `0 0 8px ${color}60` : undefined,
+                }}
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1">
+                <p
+                  className={`font-title-lg text-[16px] leading-tight truncate transition-colors duration-200 ${
+                    isSpeaking ? "text-primary font-semibold" : "text-primary"
+                  }`}
+                >
+                  {c.name}
                 </p>
-              )}
-            </div>
-          </li>
-        ))}
+                <p className="font-label-sm text-label-sm text-on-surface-variant capitalize">
+                  {isSpeaking ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-flex items-end gap-[2px] h-[10px]"
+                        aria-label="Speaking"
+                      >
+                        <span className="wave-bar h-[10px]" />
+                        <span className="wave-bar h-[10px]" />
+                        <span className="wave-bar h-[10px]" />
+                      </span>
+                      Speaking
+                    </span>
+                  ) : (
+                    c.role ?? ""
+                  )}
+                </p>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );

@@ -64,6 +64,17 @@ body {
   color: #44474e;
 }
 
+.word-token.clickable {
+  cursor: pointer;
+}
+.word-token.clickable:hover {
+  background: rgba(3, 31, 65, 0.06);
+  border-radius: 4px;
+}
+.word-token.clickable.active:hover {
+  background: rgba(115, 92, 0, 0.24);
+}
+
 /* Audio waveform pulse for "live" indicator */
 @keyframes wave-bar {
   0%, 100% { transform: scaleY(0.4); }

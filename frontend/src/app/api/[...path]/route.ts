@@ -14,6 +14,10 @@ async function proxyRequest(req: NextRequest, path: string[]) {
   if (contentType) {
     headers.set("content-type", contentType);
   }
+  const authorization = req.headers.get("authorization");
+  if (authorization) {
+    headers.set("authorization", authorization);
+  }
 
   const init: RequestInit = {
     method: req.method,
