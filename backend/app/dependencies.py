@@ -3,7 +3,8 @@ from typing import Optional
 
 from supabase import create_client, Client
 from elevenlabs.client import ElevenLabs
-import google.generativeai as genai
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
 from app.config import get_settings
 
@@ -11,7 +12,7 @@ settings = get_settings()
 
 _supabase: Optional[Client] = None
 _elevenlabs_client: Optional[ElevenLabs] = None
-_gemini_flash = None
+_gemini_flash: Optional[GenerativeModel] = None
 
 
 def get_supabase() -> Client:
@@ -37,13 +38,20 @@ def get_elevenlabs() -> ElevenLabs:
     return _elevenlabs_client
 
 
-def get_gemini():
+def get_gemini() -> GenerativeModel:
     global _gemini_flash
     if _gemini_flash is None:
-        if not settings.gemini_api_key:
-            raise RuntimeError("GEMINI_API_KEY missing in .env")
-        genai.configure(api_key=settings.gemini_api_key)
-        _gemini_flash = genai.GenerativeModel("gemini-2.0-flash-exp")
+        if not settings.google_cloud_project:
+            raise RuntimeError(
+                "GOOGLE_CLOUD_PROJECT missing in .env. "
+                "Set it to your GCP project ID and ensure GOOGLE_APPLICATION_CREDENTIALS "
+                "points to your service account key file (for local dev)."
+            )
+        vertexai.init(
+            project=settings.google_cloud_project,
+            location=settings.google_cloud_region,
+        )
+        _gemini_flash = GenerativeModel("gemini-2.0-flash")
     return _gemini_flash
 
 

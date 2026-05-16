@@ -4,16 +4,15 @@ python-dotenv==1.0.1
 pydantic-settings==2.5.0
 python-multipart==0.0.9
 
-# AI / LLM
+# AI / LLM (Vertex AI SDK - authenticates via service account / ADC)
 google-cloud-aiplatform==1.72.0
-google-generativeai==0.8.0
 
 # ElevenLabs
 elevenlabs==1.50.0
 
 # PDF Processing
-pymupdf4llm==0.0.17
-PyMuPDF==1.24.0
+pymupdf4llm>=0.0.17
+pymupdf>=1.24.10
 
 # Database
 supabase==2.9.0
