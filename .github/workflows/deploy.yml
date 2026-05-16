@@ -59,3 +59,9 @@ jobs:
           region: ${{ secrets.GCP_REGION }}
           image: ${{ env.IMAGE }}
           flags: --allow-unauthenticated
+          env_vars: |
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+            SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+            GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}

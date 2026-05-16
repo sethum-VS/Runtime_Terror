@@ -1,32 +1,12 @@
 import logging
 import traceback
 from contextlib import asynccontextmanager
-import json
-import time
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
-DEBUG_LOG_PATH = Path("/Users/sethummethsanda/Documents/Dev/Runtime_Terror/.cursor/debug-0b705f.log")
-
-
-def _debug_log(hypothesis_id: str, location: str, message: str, data: dict):
-    # #region agent log
-    payload = {
-        "sessionId": "0b705f",
-        "runId": "initial",
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    with DEBUG_LOG_PATH.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(payload) + "\n")
-    # #endregion
 
 from app.config import get_settings
 from app.models.schemas import HealthResponse
@@ -80,35 +60,6 @@ app.include_router(stories.router, prefix="/api", tags=["Stories"])
 app.include_router(pages.router, prefix="/api", tags=["Pages"])
 app.include_router(voices.router, prefix="/api", tags=["Voices"])
 app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
-
-
-@app.middleware("http")
-async def log_story_request_flow(request: Request, call_next):
-    if request.url.path.startswith("/api/stories"):
-        _debug_log(
-            "H4",
-            "backend/app/main.py:log_story_request_flow:before",
-            "Backend received /api/stories request",
-            {
-                "method": request.method,
-                "path": request.url.path,
-                "origin": request.headers.get("origin"),
-                "frontendUrlSetting": settings.frontend_url,
-            },
-        )
-    response = await call_next(request)
-    if request.url.path.startswith("/api/stories"):
-        _debug_log(
-            "H4",
-            "backend/app/main.py:log_story_request_flow:after",
-            "Backend completed /api/stories request",
-            {
-                "status": response.status_code,
-                "hasAllowOriginHeader": "access-control-allow-origin" in response.headers,
-                "allowOriginHeader": response.headers.get("access-control-allow-origin"),
-            },
-        )
-    return response
 
 
 @app.exception_handler(Exception)
