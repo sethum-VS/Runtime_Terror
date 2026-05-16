@@ -1,9 +1,12 @@
 name: Deploy Backend to Cloud Run
 
+# prod = production branch in this repo (README). main kept for teams that use it.
 on:
   push:
     branches:
+      - prod
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
