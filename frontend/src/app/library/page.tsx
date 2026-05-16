@@ -7,13 +7,12 @@ import type { Story } from "@/lib/types";
 
 export default function LibraryPage() {
   const [stories, setStories] = useState<Story[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .listStories()
       .then(setStories)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch(() => setStories([]));
   }, []);
 
   return (
@@ -31,13 +30,7 @@ export default function LibraryPage() {
         </p>
       </header>
 
-      {error && (
-        <div className="glass-panel bg-error-container/40 rounded-xl p-4 text-on-error-container mb-6">
-          {error}
-        </div>
-      )}
-
-      {!stories && !error && (
+      {stories === null && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
           {[0, 1, 2].map((i) => (
             <div
@@ -54,10 +47,10 @@ export default function LibraryPage() {
             menu_book
           </span>
           <h3 className="font-title-lg text-title-lg text-primary mb-2">
-            No stories yet
+            No books available
           </h3>
           <p className="font-body-md text-on-surface-variant mb-6">
-            Upload a PDF to bring your first story to life.
+            Upload a PDF on the Upload page to add your first audiobook.
           </p>
           <Link
             href="/"
@@ -66,7 +59,7 @@ export default function LibraryPage() {
             <span className="material-symbols-outlined text-[18px]">
               cloud_upload
             </span>
-            Upload a Story
+            Go to Upload
           </Link>
         </div>
       )}
