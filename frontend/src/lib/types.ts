@@ -4,6 +4,8 @@ export interface Story {
   status: StoryStatus;
   total_pages: number;
   error_message?: string | null;
+  is_showcase?: boolean;
+  user_id?: string | null;
 }
 
 export type StoryStatus =
@@ -74,4 +76,23 @@ export interface Voice {
   preview_url?: string;
   category?: string;
   description?: string;
+}
+
+export interface UserProfile {
+  user_id: string;
+  full_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  preferred_narrator_voice: string | null;
+  preferred_reading_theme: string | null;
+  role: string;
+}
+
+export interface BookmarkEntry {
+  story_id: string;
+  title: string;
+  status: string;
+  total_pages: number;
+  is_showcase: boolean;
+  created_at: string | null;
 }

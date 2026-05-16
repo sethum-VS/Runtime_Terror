@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SITE_NAV_LINKS, isNavActive } from "@/lib/siteNav";
+import { ProfileMenu } from "./ProfileMenu";
 
 export function Navbar() {
   const pathname = usePathname() || "/";
@@ -36,9 +37,7 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="material-symbols-outlined text-primary hover:scale-105 transition-transform duration-300 cursor-pointer">
-          account_circle
-        </span>
+        <ProfileMenu />
       </div>
     </nav>
   );

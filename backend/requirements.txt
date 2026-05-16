@@ -26,3 +26,6 @@ tenacity==9.0.0
 
 # Audio processing
 pydub==0.25.1
+
+# JWT decoding (Supabase Auth)
+python-jose[cryptography]==3.3.0

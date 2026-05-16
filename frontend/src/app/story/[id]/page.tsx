@@ -7,12 +7,39 @@ import { useStoryPlayer } from "@/hooks/useStoryPlayer";
 import { StoryText } from "@/components/player/StoryText";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { CharacterPanel } from "@/components/player/CharacterPanel";
+import { useAuth } from "@/context/AuthContext";
+import { useReadingLibrary } from "@/context/ReadingLibraryContext";
+import { useEffect, useState } from "react";
 
 export default function StoryPlayerPage() {
   const params = useParams<{ id: string }>();
   const storyId = params?.id;
+  const { user } = useAuth();
+  const { isSaved, toggleSaved, recordRecent } = useReadingLibrary();
+  const [togglingBookmark, setTogglingBookmark] = useState(false);
 
   const player = useStoryPlayer({ storyId: storyId || "" });
+
+  useEffect(() => {
+    if (player.story && storyId) {
+      recordRecent({
+        story_id: storyId,
+        title: player.story.title,
+        total_pages: player.story.total_pages,
+        last_page: player.currentPage,
+        last_position: 0,
+      });
+    }
+  }, [player.currentPage, player.story, storyId, recordRecent]);
+
+  async function handleToggleBookmark() {
+    if (!storyId) return;
+    setTogglingBookmark(true);
+    try {
+      await toggleSaved(storyId);
+    } catch {}
+    setTogglingBookmark(false);
+  }
 
   if (!storyId) {
     return <FullscreenStatus icon="error" message="Invalid story id" />;
@@ -34,17 +61,12 @@ export default function StoryPlayerPage() {
 
   return (
     <main className="pt-[140px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
-      {/* Hidden audio element */}
       <audio
         ref={player.audioRef}
         onTimeUpdate={player.handleTimeUpdate}
         onEnded={player.handleEnded}
-        onPlay={() => {
-          /* state managed via togglePlay */
-        }}
-        onPause={() => {
-          /* state managed via togglePlay */
-        }}
+        onPlay={() => {}}
+        onPause={() => {}}
         preload="auto"
       />
 
@@ -59,14 +81,29 @@ export default function StoryPlayerPage() {
             </span>
             Library
           </Link>
-          <h1 className="font-headline-md text-headline-md text-primary truncate">
-            {player.story.title}
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="font-headline-md text-headline-md text-primary truncate">
+              {player.story.title}
+            </h1>
+            {user && (
+              <button
+                onClick={handleToggleBookmark}
+                disabled={togglingBookmark}
+                className="text-primary hover:scale-110 transition-transform disabled:opacity-50 shrink-0"
+                aria-label={
+                  isSaved(storyId) ? "Remove bookmark" : "Add bookmark"
+                }
+              >
+                <span className="material-symbols-outlined text-[28px]">
+                  {isSaved(storyId) ? "bookmark" : "bookmark_border"}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-card-gap">
-        {/* Story text + controls */}
         <div className="lg:col-span-8 flex flex-col gap-card-gap">
           <motion.div
             key={player.currentPage}
@@ -99,7 +136,6 @@ export default function StoryPlayerPage() {
           />
         </div>
 
-        {/* Sidebar */}
         <div className="lg:col-span-4 flex flex-col gap-card-gap">
           <CharacterPanel characters={player.characters} />
           <PageGrid
