@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { formatAuthError } from "@/lib/authErrors";
 
 export default function SignInPage() {
   const { signIn, user, isLoading } = useAuth();
@@ -26,7 +27,7 @@ export default function SignInPage() {
       await signIn(email, password);
       router.push("/profile");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Sign in failed");
+      setError(formatAuthError(err));
     } finally {
       setSubmitting(false);
     }
