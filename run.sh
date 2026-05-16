@@ -34,7 +34,13 @@ if [[ ! -d .venv ]]; then
   python3 -m venv .venv
 fi
 # shellcheck source=/dev/null
-source .venv/bin/activate
+if [[ -f .venv/bin/activate ]]; then
+  source .venv/bin/activate
+elif [[ -f .venv/Scripts/activate ]]; then
+  source .venv/Scripts/activate
+else
+  die "backend/.venv missing activate script (expected .venv/bin or .venv/Scripts)"
+fi
 python -m pip install --upgrade pip >/dev/null
 pip install -r requirements.txt
 
