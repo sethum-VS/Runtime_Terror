@@ -1,4 +1,7 @@
 import asyncio
+import json
+import time
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from app.dependencies import get_supabase
@@ -8,6 +11,23 @@ from app.models.schemas import StoryResponse, CharacterResponse
 from app.utils.character_roles import normalize_character_role
 
 router = APIRouter()
+DEBUG_LOG_PATH = Path("/Users/sethummethsanda/Documents/Dev/Runtime_Terror/.cursor/debug-0b705f.log")
+
+
+def _debug_log(hypothesis_id: str, location: str, message: str, data: dict):
+    # #region agent log
+    payload = {
+        "sessionId": "0b705f",
+        "runId": "initial",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    with DEBUG_LOG_PATH.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload) + "\n")
+    # #endregion
 
 MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -183,12 +203,34 @@ async def get_characters(story_id: str):
 @router.get("/stories")
 async def list_stories():
     """List all stories (for My Library page)."""
-    supabase = get_supabase()
-    result = (
-        supabase.table("stories")
-        .select("id, title, status, total_pages, created_at")
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
+    _debug_log(
+        "H5",
+        "backend/app/routes/stories.py:list_stories:entry",
+        "list_stories endpoint entered",
+        {},
     )
-    return result.data or []
+    try:
+        supabase = get_supabase()
+        result = (
+            supabase.table("stories")
+            .select("id, title, status, total_pages, created_at")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        count = len(result.data or [])
+        _debug_log(
+            "H5",
+            "backend/app/routes/stories.py:list_stories:success",
+            "list_stories query succeeded",
+            {"storyCount": count},
+        )
+        return result.data or []
+    except Exception as e:
+        _debug_log(
+            "H5",
+            "backend/app/routes/stories.py:list_stories:error",
+            "list_stories query failed",
+            {"errorType": type(e).__name__, "errorMessage": str(e)[:500]},
+        )
+        raise
