@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
 import { api } from "@/lib/api";
 import type { Story } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { useReadingLibrary } from "@/context/ReadingLibraryContext";
+import { pickPageVariants } from "@/lib/animations";
 
 export default function LibraryPage() {
   const [stories, setStories] = useState<Story[] | null>(null);
   const { user } = useAuth();
   const { isSaved, toggleSaved } = useReadingLibrary();
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const reduced = useReducedMotion();
+  const { item } = pickPageVariants(reduced);
 
   useEffect(() => {
     api
@@ -34,7 +38,7 @@ export default function LibraryPage() {
 
   return (
     <main className="pt-[160px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
-      <header className="mb-10">
+      <motion.header variants={item} className="mb-10">
         <p className="font-label-sm text-label-sm uppercase tracking-widest text-secondary mb-2">
           Your Audiobooks
         </p>
@@ -45,10 +49,10 @@ export default function LibraryPage() {
           Every story you&apos;ve ever uploaded. Resume listening, share, or
           start a new tale.
         </p>
-      </header>
+      </motion.header>
 
       {!user && (
-        <div className="glass-panel bg-primary-container/40 rounded-xl px-6 py-4 mb-8 flex items-center gap-3">
+        <motion.div variants={item} className="glass-panel bg-primary-container/40 rounded-xl px-6 py-4 mb-8 flex items-center gap-3">
           <span className="material-symbols-outlined text-[24px] text-primary">
             info
           </span>
@@ -61,22 +65,28 @@ export default function LibraryPage() {
             </Link>{" "}
             to upload your own stories and save your favorites.
           </p>
-        </div>
+        </motion.div>
       )}
 
       {stories === null && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
+        <motion.div
+          variants={item}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap"
+        >
           {[0, 1, 2].map((i) => (
             <div
               key={i}
               className="glass-panel bg-surface/50 rounded-xl p-6 h-44 shimmer"
             />
           ))}
-        </div>
+        </motion.div>
       )}
 
       {stories && stories.length === 0 && (
-        <div className="glass-panel bg-surface/60 rounded-xl p-12 text-center">
+        <motion.div
+          variants={item}
+          className="glass-panel bg-surface/60 rounded-xl p-12 text-center"
+        >
           <span className="material-symbols-outlined text-[48px] text-on-surface-variant mb-3 block">
             menu_book
           </span>
@@ -95,11 +105,14 @@ export default function LibraryPage() {
             </span>
             Go to Upload
           </Link>
-        </div>
+        </motion.div>
       )}
 
       {stories && stories.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
+        <motion.div
+          variants={item}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap"
+        >
           {stories.map((s) => (
             <div
               key={s.id}
@@ -139,7 +152,7 @@ export default function LibraryPage() {
               </Link>
             </div>
           ))}
-        </div>
+        </motion.div>
       )}
     </main>
   );

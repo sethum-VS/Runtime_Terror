@@ -59,107 +59,125 @@ export default function StoryPlayerPage() {
     return <FullscreenStatus icon="auto_stories" message="Loading story…" />;
   }
 
-  return (
-    <main className="pt-[140px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
-      <audio
-        ref={player.bindAudioElement}
-        onTimeUpdate={player.handleTimeUpdate}
-        onEnded={player.handleEnded}
-        onPlay={player.handlePlay}
-        onPause={player.handlePause}
-        preload="auto"
-        playsInline
-      />
+  const playerControlsProps = {
+    isPlaying: player.isPlaying,
+    currentTime: player.currentTime,
+    duration: player.duration,
+    currentPage: player.currentPage,
+    totalPages: player.story.total_pages,
+    nextPageStatus: player.nextPageStatus,
+    canPlay: player.canPlay,
+    pageLoading: player.pageLoading,
+    onTogglePlay: player.togglePlay,
+    onSeek: player.seekTo,
+    onPrev: () => player.goToPage(player.currentPage - 1),
+    onNext: () => player.goToPage(player.currentPage + 1),
+  };
 
-      <header className="flex items-start justify-between gap-6 mb-8">
-        <div className="min-w-0">
-          <Link
-            href="/library"
-            className="inline-flex items-center gap-1 font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors mb-2"
-          >
-            <span className="material-symbols-outlined text-[16px]">
-              arrow_back
-            </span>
-            Library
-          </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="font-headline-md text-headline-md text-primary truncate">
-              {player.story.title}
-            </h1>
-            {user && (
-              <button
-                onClick={handleToggleBookmark}
-                disabled={togglingBookmark}
-                className="text-primary hover:scale-110 transition-transform disabled:opacity-50 shrink-0"
-                aria-label={
-                  isSaved(storyId) ? "Remove bookmark" : "Add bookmark"
-                }
-              >
-                <span className="material-symbols-outlined text-[28px]">
-                  {isSaved(storyId) ? "bookmark" : "bookmark_border"}
-                </span>
-              </button>
+  return (
+    <>
+      <main className="pt-[140px] pb-32 lg:pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
+        <audio
+          ref={player.bindAudioElement}
+          onTimeUpdate={player.handleTimeUpdate}
+          onEnded={player.handleEnded}
+          onPlay={player.handlePlay}
+          onPause={player.handlePause}
+          preload="auto"
+          playsInline
+        />
+
+        <header className="flex items-start justify-between gap-6 mb-8">
+          <div className="min-w-0">
+            <Link
+              href="/library"
+              className="inline-flex items-center gap-1 font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors mb-2"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                arrow_back
+              </span>
+              Library
+            </Link>
+            <div className="flex items-center gap-3">
+              <h1 className="font-headline-md text-headline-md text-primary truncate">
+                {player.story.title}
+              </h1>
+              {user && (
+                <button
+                  onClick={handleToggleBookmark}
+                  disabled={togglingBookmark}
+                  className="text-primary hover:scale-110 transition-transform disabled:opacity-50 shrink-0"
+                  aria-label={
+                    isSaved(storyId) ? "Remove bookmark" : "Add bookmark"
+                  }
+                >
+                  <span className="material-symbols-outlined text-[28px]">
+                    {isSaved(storyId) ? "bookmark" : "bookmark_border"}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-card-gap">
+          <div className="lg:col-span-8 flex flex-col gap-card-gap">
+            <motion.div
+              key={player.currentPage}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="glass-panel bg-surface/70 rounded-xl p-6 md:p-8 min-h-[320px] md:min-h-[420px] max-h-[55vh] overflow-y-auto"
+            >
+              {player.pageLoading || !player.pageData ? (
+                <PageLoader />
+              ) : (
+                <StoryText
+                  words={player.words}
+                  activeIndex={player.activeWordIndex}
+                  fallbackText={
+                    player.pageData?.raw_segments
+                      ?.map((s) => s.text)
+                      .join(" ") ?? undefined
+                  }
+                />
+              )}
+            </motion.div>
+
+            {player.playError && (
+              <p className="text-center font-label-sm text-label-sm text-error mb-2">
+                {player.playError}
+              </p>
             )}
+
+            <div className="hidden lg:block">
+              <PlayerControls {...playerControlsProps} />
+            </div>
+          </div>
+
+          <div className="hidden lg:flex lg:col-span-4 flex-col gap-card-gap">
+            <CharacterPanel characters={player.characters} />
+            <PageGrid
+              currentPage={player.currentPage}
+              totalPages={player.story.total_pages}
+              onJump={player.goToPage}
+            />
           </div>
         </div>
-      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-card-gap">
-        <div className="lg:col-span-8 flex flex-col gap-card-gap">
-          <motion.div
-            key={player.currentPage}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="glass-panel bg-surface/70 rounded-xl p-8 min-h-[420px] max-h-[60vh] overflow-y-auto"
-          >
-            {player.pageLoading || !player.pageData ? (
-              <PageLoader />
-            ) : (
-              <StoryText
-                words={player.words}
-                activeIndex={player.activeWordIndex}
-                fallbackText={
-                  player.pageData?.raw_segments
-                    ?.map((s) => s.text)
-                    .join(" ") ?? undefined
-                }
-              />
-            )}
-          </motion.div>
-
-          {player.playError && (
-            <p className="text-center font-label-sm text-label-sm text-error mb-2">
-              {player.playError}
-            </p>
-          )}
-
-          <PlayerControls
-            isPlaying={player.isPlaying}
-            currentTime={player.currentTime}
-            duration={player.duration}
-            currentPage={player.currentPage}
-            totalPages={player.story.total_pages}
-            nextPageStatus={player.nextPageStatus}
-            canPlay={player.canPlay}
-            pageLoading={player.pageLoading}
-            onTogglePlay={player.togglePlay}
-            onSeek={player.seekTo}
-            onPrev={() => player.goToPage(player.currentPage - 1)}
-            onNext={() => player.goToPage(player.currentPage + 1)}
-          />
-        </div>
-
-        <div className="lg:col-span-4 flex flex-col gap-card-gap">
-          <CharacterPanel characters={player.characters} />
+        <div className="lg:hidden mt-card-gap">
           <PageGrid
             currentPage={player.currentPage}
             totalPages={player.story.total_pages}
             onJump={player.goToPage}
           />
         </div>
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 px-container-padding-mobile pb-4 lg:hidden">
+        <PlayerControls {...playerControlsProps} />
       </div>
-    </main>
+    </>
   );
 }
 
