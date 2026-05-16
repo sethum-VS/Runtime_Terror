@@ -14,6 +14,15 @@ body {
   color: #1b1b1b;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+a,
+button,
+[role="button"],
+[role="slider"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Cinematic radial gradient backdrop */

@@ -29,24 +29,37 @@ export function PlayerControls({
 
   return (
     <div className="glass-panel bg-surface/80 rounded-xl p-6 shadow-[0_20px_40px_rgba(0,0,0,0.06)]">
-      {/* Progress bar */}
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-valuenow={currentTime}
-        aria-valuemin={0}
-        aria-valuemax={duration}
-        className="h-2 bg-surface-container-high rounded-full cursor-pointer overflow-hidden"
-        onClick={(e) => {
-          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-          const pct = (e.clientX - rect.left) / rect.width;
-          onSeek(pct * duration);
-        }}
-      >
+      {/* Progress bar — wrapped in larger touch target */}
+      <div className="py-3 -my-3 cursor-pointer group">
         <div
-          className="h-full bg-secondary rounded-full transition-all"
-          style={{ width: `${progressPct}%` }}
-        />
+          role="slider"
+          tabIndex={0}
+          aria-valuenow={currentTime}
+          aria-valuemin={0}
+          aria-valuemax={duration}
+          className="h-2 bg-surface-container-high rounded-full overflow-hidden group-hover:h-3 transition-all duration-150"
+          onClick={(e) => {
+            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            onSeek(pct * duration);
+          }}
+          onTouchStart={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+            onSeek(pct * duration);
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+            onSeek(pct * duration);
+          }}
+        >
+          <div
+            className="h-full bg-secondary rounded-full transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
       </div>
       <div className="flex justify-between mt-2 font-label-sm text-label-sm text-on-surface-variant">
         <span>{formatTime(currentTime)}</span>

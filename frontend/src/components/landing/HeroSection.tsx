@@ -86,7 +86,7 @@ export function HeroSection() {
   };
 
   return (
-    <section className="grid grid-cols-1 md:grid-cols-12 gap-gutter min-h-[760px] items-center">
+    <section className="grid grid-cols-1 md:grid-cols-12 gap-gutter min-h-0 md:min-h-[760px] items-center">
       {/* Left side */}
       <div className="col-span-1 md:col-span-5 flex flex-col gap-6 z-10">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel bg-surface/30 w-fit">
@@ -132,8 +132,8 @@ export function HeroSection() {
         </div>
       </div>
 
-      {/* Right side showcase */}
-      <div className="col-span-1 md:col-span-7 relative h-[600px] w-full mt-12 md:mt-0">
+      {/* Right side showcase — hidden on mobile */}
+      <div className="hidden md:block col-span-1 md:col-span-7 relative h-[600px] w-full mt-12 md:mt-0">
         <ShowcaseGraphic />
       </div>
     </section>
@@ -189,29 +189,31 @@ function UploadDropzone({
       }}
       onClick={onPick}
     >
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined">cloud_upload</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          {uploading ? (
-            <p className="font-title-lg text-title-lg text-primary">
-              Uploading…
-            </p>
-          ) : (
-            <>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined">cloud_upload</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            {uploading ? (
               <p className="font-title-lg text-title-lg text-primary">
-                Drop your PDF here, or click to browse
+                Uploading…
               </p>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                Max 10 MB · PDF only
-              </p>
-            </>
-          )}
+            ) : (
+              <>
+                <p className="font-title-lg text-title-lg text-primary">
+                  Drop your PDF here, or tap to browse
+                </p>
+                <p className="font-body-md text-body-md text-on-surface-variant">
+                  Max 10 MB · PDF only
+                </p>
+              </>
+            )}
+          </div>
         </div>
         <button
           type="button"
-          className="bg-primary text-on-primary px-6 py-3 rounded-full font-label-md text-label-md hover:scale-105 transition-all duration-300 shadow-[0_10px_20px_rgba(3,31,65,0.2)]"
+          className="w-full sm:w-auto bg-primary text-on-primary px-6 py-3 rounded-full font-label-md text-label-md hover:scale-105 transition-all duration-300 shadow-[0_10px_20px_rgba(3,31,65,0.2)] min-h-[44px]"
         >
           Launch VoiceTale
         </button>
