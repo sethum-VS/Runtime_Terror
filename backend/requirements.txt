@@ -6,6 +6,8 @@ python-multipart==0.0.9
 
 # AI / LLM (Vertex AI SDK - authenticates via service account / ADC)
 google-cloud-aiplatform==1.72.0
+# Google Gen AI SDK (used for Veo 3.1 video generation + Gemini 2.5 Pro scene analysis)
+google-genai>=1.10.0
 
 # ElevenLabs (2.x required for text_to_dialogue API)
 elevenlabs>=2.47.0

@@ -112,6 +112,27 @@ class ConversationEndRequest(BaseModel):
     agent_id: str
 
 
+class SceneMeta(BaseModel):
+    topic: Optional[str] = None
+    mood: Optional[str] = None
+    environment: Optional[str] = None
+    time_of_day: Optional[str] = None
+    weather: Optional[str] = None
+    visual_style: Optional[str] = None
+    color_palette: Optional[str] = None
+    camera_motion: Optional[str] = None
+    video_prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
+
+
+class SceneResponse(BaseModel):
+    page_number: int
+    status: str  # idle | generating | ready | failed | disabled
+    video_url: Optional[str] = None
+    scene_meta: Optional[SceneMeta] = None
+    error_message: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     status: str
     service: str

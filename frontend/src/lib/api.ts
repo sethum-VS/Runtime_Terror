@@ -8,6 +8,7 @@ import type {
   UserProfile,
   BookmarkEntry,
   ConversationStartResponse,
+  SceneData,
 } from "./types";
 
 // Relative /api/* calls are handled by `src/app/api/[...path]/route.ts`, which
@@ -169,6 +170,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ agent_id: agentId }),
     });
+  },
+
+  async getScene(storyId: string, pageNum: number): Promise<SceneData> {
+    return jsonFetch<SceneData>(
+      `/api/stories/${storyId}/pages/${pageNum}/scene`
+    );
+  },
+
+  async generateScene(storyId: string, pageNum: number): Promise<SceneData> {
+    return jsonFetch<SceneData>(
+      `/api/stories/${storyId}/pages/${pageNum}/scene/generate`,
+      { method: "POST" }
+    );
   },
 };
 

@@ -101,3 +101,31 @@ export interface ConversationStartResponse {
   signed_url: string;
   agent_id: string;
 }
+
+export type SceneStatus =
+  | "idle"
+  | "generating"
+  | "ready"
+  | "failed"
+  | "disabled";
+
+export interface SceneMeta {
+  topic?: string | null;
+  mood?: string | null;
+  environment?: string | null;
+  time_of_day?: string | null;
+  weather?: string | null;
+  visual_style?: string | null;
+  color_palette?: string | null;
+  camera_motion?: string | null;
+  video_prompt?: string | null;
+  negative_prompt?: string | null;
+}
+
+export interface SceneData {
+  page_number: number;
+  status: SceneStatus;
+  video_url?: string | null;
+  scene_meta?: SceneMeta | null;
+  error_message?: string | null;
+}

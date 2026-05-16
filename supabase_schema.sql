@@ -85,6 +85,13 @@ CREATE TABLE story_pages (
     char_count INT DEFAULT 0,
     error_message TEXT,
     generated_at TIMESTAMPTZ,
+    -- Live background (Veo 3.1 Lite + Gemini 2.5 Pro scene analysis)
+    video_url TEXT,
+    video_status TEXT DEFAULT 'idle'
+        CHECK (video_status IN ('idle','generating','ready','failed','disabled')),
+    scene_meta_json JSONB,
+    video_error TEXT,
+    video_generated_at TIMESTAMPTZ,
     UNIQUE(story_id, page_number)
 );
 
@@ -212,6 +219,23 @@ CREATE POLICY "Service role update for story-audio" ON storage.objects
 
 CREATE POLICY "Service role delete for story-audio" ON storage.objects
     FOR DELETE USING (bucket_id = 'story-audio');
+
+-- Story video bucket (public — generated Veo background clips)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('story-video', 'story-video', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Public read access for story-video" ON storage.objects
+    FOR SELECT USING (bucket_id = 'story-video');
+
+CREATE POLICY "Service role upload for story-video" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'story-video');
+
+CREATE POLICY "Service role update for story-video" ON storage.objects
+    FOR UPDATE USING (bucket_id = 'story-video');
+
+CREATE POLICY "Service role delete for story-video" ON storage.objects
+    FOR DELETE USING (bucket_id = 'story-video');
 
 -- Avatars bucket (public read, authenticated write)
 INSERT INTO storage.buckets (id, name, public)

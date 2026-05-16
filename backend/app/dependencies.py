@@ -14,11 +14,15 @@ from app.config import get_settings
 settings = get_settings()
 
 VERTEX_GEMINI_MODEL = "gemini-2.5-flash"
+VERTEX_GEMINI_PRO_MODEL = "gemini-2.5-pro"
 
 _supabase: Optional[Client] = None
 _elevenlabs_client: Optional[ElevenLabs] = None
 _gemini_flash: Optional[GenerativeModel] = None
 _gemini_model_name: Optional[str] = None
+_gemini_pro: Optional[GenerativeModel] = None
+_gemini_pro_model_name: Optional[str] = None
+_genai_client = None  # google.genai.Client for Veo / multimodal endpoints
 
 
 def get_supabase() -> Client:
@@ -76,7 +80,69 @@ def get_gemini() -> GenerativeModel:
     return _gemini_flash
 
 
+def _resolve_gemini_pro_model() -> str:
+    cfg = get_settings()
+    model = (cfg.gemini_pro_model or VERTEX_GEMINI_PRO_MODEL).strip()
+    return model or VERTEX_GEMINI_PRO_MODEL
+
+
+def get_gemini_pro() -> GenerativeModel:
+    """Gemini 2.5 Pro on Vertex AI (1M-token context, used for scene analysis)."""
+    global _gemini_pro, _gemini_pro_model_name
+    model_name = _resolve_gemini_pro_model()
+    if _gemini_pro is None or _gemini_pro_model_name != model_name:
+        cfg = get_settings()
+        if not cfg.google_cloud_project:
+            raise RuntimeError(
+                "GOOGLE_CLOUD_PROJECT is not set; cannot init Gemini 2.5 Pro on Vertex AI."
+            )
+        vertexai.init(
+            project=cfg.google_cloud_project,
+            location=cfg.google_cloud_region,
+        )
+        print(f"[vertexai] Using Pro model: {model_name}")
+        _gemini_pro = GenerativeModel(model_name)
+        _gemini_pro_model_name = model_name
+    return _gemini_pro
+
+
+def get_genai_client():
+    """Lazy google.genai client bound to Vertex AI (used for Veo video generation).
+
+    Uses the same Application Default Credentials as the rest of the Vertex calls,
+    so no extra auth setup is required.
+    """
+    global _genai_client
+    if _genai_client is None:
+        try:
+            from google import genai  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "google-genai is not installed. Add 'google-genai' to backend/requirements.txt."
+            ) from exc
+
+        cfg = get_settings()
+        if not cfg.google_cloud_project:
+            raise RuntimeError(
+                "GOOGLE_CLOUD_PROJECT is not set; cannot init google-genai Vertex client."
+            )
+        _genai_client = genai.Client(
+            vertexai=True,
+            project=cfg.google_cloud_project,
+            location=cfg.google_cloud_region,
+        )
+        print(
+            f"[genai] Vertex client ready (project={cfg.google_cloud_project}, "
+            f"location={cfg.google_cloud_region}, veo_model={cfg.veo_model})"
+        )
+    return _genai_client
+
+
 elevenlabs_semaphore = asyncio.Semaphore(settings.elevenlabs_max_concurrent)
+# Only allow a handful of Veo jobs concurrently — each costs $$ and ties up
+# the operations API. Pages share this semaphore so a long story doesn't fan
+# out to dozens of simultaneous video generations.
+veo_semaphore = asyncio.Semaphore(2)
 
 
 async def _verify_token_via_supabase_auth(token: str) -> str | None:

@@ -4,10 +4,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useStoryPlayer } from "@/hooks/useStoryPlayer";
+import { useStorySceneBackground } from "@/hooks/useStorySceneBackground";
 import { StoryText } from "@/components/player/StoryText";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { CharacterPanel } from "@/components/player/CharacterPanel";
 import { VoiceAgent } from "@/components/player/VoiceAgent";
+import { LiveBackground } from "@/components/player/LiveBackground";
 import { useAuth } from "@/context/AuthContext";
 import { useReadingLibrary } from "@/context/ReadingLibraryContext";
 import { useEffect, useState, useCallback } from "react";
@@ -20,6 +22,13 @@ export default function StoryPlayerPage() {
   const [togglingBookmark, setTogglingBookmark] = useState(false);
 
   const player = useStoryPlayer({ storyId: storyId || "" });
+  const sceneBackground = useStorySceneBackground({
+    storyId: storyId || "",
+    currentPage: player.currentPage,
+    totalPages: player.story?.total_pages ?? 0,
+    audioCurrentTime: player.currentTime,
+    audioDuration: player.duration,
+  });
 
   useEffect(() => {
     if (player.story && storyId) {
@@ -85,6 +94,13 @@ export default function StoryPlayerPage() {
 
   return (
     <>
+      <LiveBackground
+        currentScene={sceneBackground.currentScene}
+        nextScene={sceneBackground.nextScene}
+        hookStatus={sceneBackground.status}
+        isPlaying={player.isPlaying}
+      />
+
       <main className="pt-[140px] pb-32 lg:pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
         <audio
           ref={player.bindAudioElement}
