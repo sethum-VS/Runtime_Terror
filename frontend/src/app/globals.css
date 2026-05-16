@@ -53,6 +53,13 @@ button,
   word-wrap: normal;
   white-space: nowrap;
   direction: ltr;
+  /* Hint to font-display: block — glyph hidden until font loads */
+  font-display: block;
+}
+
+/* Hide ligature text completely until icon font ready; reserves layout space. */
+html:not(.fonts-ready) .material-symbols-outlined {
+  visibility: hidden;
 }
 
 /* Read-along word highlighting */
