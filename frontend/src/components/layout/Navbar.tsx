@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const tabs = [
-  { href: "/", label: "Upload", match: (p: string) => p === "/" },
-  { href: "/library", label: "My Library", match: (p: string) => p.startsWith("/library") || p.startsWith("/story") },
-  { href: "/voices", label: "Explore Voices", match: (p: string) => p.startsWith("/voices") },
-  { href: "/about", label: "About", match: (p: string) => p.startsWith("/about") },
-];
+import { SITE_NAV_LINKS, isNavActive } from "@/lib/siteNav";
 
 export function Navbar() {
   const pathname = usePathname() || "/";
@@ -23,8 +17,8 @@ export function Navbar() {
       </Link>
 
       <div className="hidden md:flex items-center gap-8">
-        {tabs.map((tab) => {
-          const isActive = tab.match(pathname);
+        {SITE_NAV_LINKS.map((tab) => {
+          const isActive = isNavActive(pathname, tab.href);
           return (
             <Link
               key={tab.href}

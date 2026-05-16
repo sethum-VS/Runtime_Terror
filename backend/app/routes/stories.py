@@ -5,6 +5,7 @@ from app.dependencies import get_supabase
 from app.services.pdf_converter import convert_pdf_to_markdown
 from app.services.story_parser import parse_story
 from app.models.schemas import StoryResponse, CharacterResponse
+from app.utils.character_roles import normalize_character_role
 
 router = APIRouter()
 
@@ -67,12 +68,13 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
 
         # Save characters
         for char in parsed.get("characters", []):
+            char_id = char.get("character_id", "char_unknown")
             supabase.table("characters").insert({
                 "story_id": story_id,
-                "character_id": char.get("character_id", "char_unknown"),
+                "character_id": char_id,
                 "name": char.get("name", "Unknown"),
                 "description": char.get("description", ""),
-                "role": char.get("role", "supporting"),
+                "role": normalize_character_role(char.get("role"), character_id=char_id),
                 "speaking_style": char.get("speaking_style", "neutral"),
                 "estimated_age": char.get("estimated_age", "adult"),
                 "gender": char.get("gender", "other"),

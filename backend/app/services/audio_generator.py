@@ -3,6 +3,7 @@ import base64
 import io
 from typing import Any, List
 
+from elevenlabs.types import DialogueInput
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -18,6 +19,17 @@ from app.config import get_settings
 settings = get_settings()
 
 
+def _to_dialogue_inputs(inputs: List[dict]) -> List[DialogueInput]:
+    """Convert mapper output dicts to ElevenLabs DialogueInput models."""
+    dialogue: List[DialogueInput] = []
+    for inp in inputs:
+        text = (inp.get("text") or "").strip()
+        voice_id = (inp.get("voice_id") or "").strip()
+        if text and voice_id:
+            dialogue.append(DialogueInput(text=text, voice_id=voice_id))
+    return dialogue
+
+
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -27,26 +39,31 @@ settings = get_settings()
 async def _call_elevenlabs_dialogue(inputs: List[dict]) -> Any:
     """Call ElevenLabs Text-to-Dialogue with timestamps. Retries on errors."""
     elevenlabs = get_elevenlabs()
+    if not hasattr(elevenlabs, "text_to_dialogue"):
+        raise RuntimeError(
+            "ElevenLabs SDK is too old for Text-to-Dialogue. "
+            "Install elevenlabs>=2.47.0 (pip install -U 'elevenlabs>=2.47.0')."
+        )
+
+    dialogue_inputs = _to_dialogue_inputs(inputs)
+    if not dialogue_inputs:
+        raise ValueError("No valid dialogue inputs (text + voice_id required)")
+
     async with elevenlabs_semaphore:
-        # Try the with-timestamps variant first; fall back to plain convert
-        try:
-            response = await asyncio.to_thread(
-                elevenlabs.text_to_dialogue.convert_with_timestamps,
-                inputs=inputs,
-            )
-            return response
-        except AttributeError:
-            response = await asyncio.to_thread(
-                elevenlabs.text_to_dialogue.convert,
-                inputs=inputs,
-            )
-            return response
+        return await asyncio.to_thread(
+            elevenlabs.text_to_dialogue.convert_with_timestamps,
+            inputs=dialogue_inputs,
+            output_format="mp3_44100_128",
+        )
 
 
 def _extract_audio_bytes(result: Any) -> bytes:
     """Extract MP3 bytes from various ElevenLabs response shapes."""
-    if hasattr(result, "audio_base64") and result.audio_base64:
-        return base64.b64decode(result.audio_base64)
+    for attr in ("audio_base64", "audio_base_64"):
+        value = getattr(result, attr, None)
+        if value:
+            return base64.b64decode(value)
+
     if hasattr(result, "audio") and result.audio:
         audio = result.audio
         if isinstance(audio, (bytes, bytearray)):
@@ -56,12 +73,11 @@ def _extract_audio_bytes(result: Any) -> bytes:
                 return base64.b64decode(audio)
             except Exception:
                 return b""
-        # Iterable of byte chunks
         try:
             return b"".join(audio)
         except Exception:
             return b""
-    # Some SDK versions return a generator/iterator directly
+
     try:
         return b"".join(result)  # type: ignore
     except Exception:
@@ -70,7 +86,9 @@ def _extract_audio_bytes(result: Any) -> bytes:
 
 def _extract_alignment(result: Any) -> dict:
     """Pull alignment/timestamps off the result if present."""
-    alignment = getattr(result, "alignment", None)
+    alignment = getattr(result, "alignment", None) or getattr(
+        result, "normalized_alignment", None
+    )
     if not alignment:
         return {}
 
@@ -150,7 +168,6 @@ async def generate_page_audio(story_id: str, page_number: int) -> dict:
 
         file_path = f"{story_id}/page_{page_number:03d}.mp3"
 
-        # Upload to Supabase Storage (overwrite if exists)
         try:
             supabase.storage.from_("story-audio").upload(
                 path=file_path,
@@ -158,7 +175,6 @@ async def generate_page_audio(story_id: str, page_number: int) -> dict:
                 file_options={"content-type": "audio/mpeg", "upsert": "true"},
             )
         except Exception as e:
-            # Some supabase-py versions reject upsert option; try update
             err_msg = str(e).lower()
             if "exists" in err_msg or "duplicate" in err_msg:
                 supabase.storage.from_("story-audio").update(
@@ -170,7 +186,6 @@ async def generate_page_audio(story_id: str, page_number: int) -> dict:
                 raise
 
         audio_url = supabase.storage.from_("story-audio").get_public_url(file_path)
-        # supabase-py sometimes appends a trailing `?` -- clean it up
         if isinstance(audio_url, str):
             audio_url = audio_url.rstrip("?")
 
