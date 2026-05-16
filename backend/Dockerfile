@@ -2,16 +2,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for PyMuPDF + audio
+# System deps for PyMuPDF + ffmpeg audio stitching
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip --no-cache-dir \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+
+# Non-root user — Cloud Run best practice
+RUN adduser --disabled-password --gecos "" appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 ENV PORT=8080
 EXPOSE 8080

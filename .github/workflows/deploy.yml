@@ -1,0 +1,58 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write   # Required for Workload Identity Federation
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:${{ github.sha }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        working-directory: backend
+        run: |
+          docker build \
+            --tag "$IMAGE" \
+            --cache-from "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest" \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            .
+
+      - name: Push Docker image to Artifact Registry
+        run: docker push "$IMAGE"
+
+      - name: Tag image as latest
+        run: |
+          docker tag "$IMAGE" \
+            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest"
+          docker push \
+            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: backend-api
+          region: ${{ secrets.GCP_REGION }}
+          image: ${{ env.IMAGE }}
+          flags: --allow-unauthenticated
