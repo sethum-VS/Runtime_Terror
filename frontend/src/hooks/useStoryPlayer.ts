@@ -71,14 +71,38 @@ export function buildWordsFromTimestamps(
   return words;
 }
 
+/** Binary search: active word at playback time t (always scans from scratch). */
+function findActiveWordIndex(words: WordToken[], t: number): number {
+  if (!words.length || t < 0) return -1;
+
+  let lo = 0;
+  let hi = words.length - 1;
+
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (words[mid].start <= t) lo = mid;
+    else hi = mid - 1;
+  }
+
+  const w = words[lo];
+  if (t >= w.start && t <= w.end) return lo;
+  if (t < w.start) return lo > 0 ? lo - 1 : -1;
+  return lo < words.length - 1 ? lo + 1 : lo;
+}
+
 interface UseStoryPlayerArgs {
   storyId: string;
 }
 
 export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const loadedAudioUrlRef = useRef<string | null>(null);
+  const audioListenersCleanupRef = useRef<(() => void) | null>(null);
+  const pendingPlayRef = useRef(false);
+  const autoPlayAfterLoadRef = useRef(false);
+  const shouldResumePositionRef = useRef(false);
   const nextPageRequestedRef = useRef(false);
-  const lastSavedPositionRef = useRef(0);
+  const resumePositionRef = useRef(0);
   const lastSaveAtRef = useRef(0);
 
   const [story, setStory] = useState<Story | null>(null);
@@ -94,6 +118,8 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
 
   const words: WordToken[] = pageData?.timestamps_json
     ? buildWordsFromTimestamps(pageData.timestamps_json)
@@ -118,8 +144,12 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
         setStory(s);
         setCharacters(chars);
         const startPage = Math.max(1, session.last_page || 1);
+        const savedPosition = session.last_position || 0;
         setCurrentPage(startPage);
-        lastSavedPositionRef.current = session.last_position || 0;
+        if (savedPosition > 0) {
+          resumePositionRef.current = savedPosition;
+          shouldResumePositionRef.current = true;
+        }
       } catch (e) {
         if (!cancelled)
           setError(e instanceof Error ? e.message : "Failed to load story");
@@ -139,8 +169,18 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
 
     const ensurePage = async () => {
       setPageLoading(true);
+      setAudioReady(false);
+      setPlayError(null);
       setActiveWordIndex(-1);
+      setCurrentTime(0);
+      setDuration(0);
       setPageData(null);
+      loadedAudioUrlRef.current = null;
+      shouldResumePositionRef.current = false;
+      resumePositionRef.current = 0;
+      if (!autoPlayAfterLoadRef.current) {
+        setIsPlaying(false);
+      }
       try {
         const p = await api.getPage(storyId, currentPage);
         if (cancelled) return;
@@ -190,30 +230,113 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     };
   }, [storyId, currentPage]);
 
-  // ----- When new page audio loads, optionally resume from saved position -----
-  useEffect(() => {
-    if (!pageData?.audio_url || !audioRef.current) return;
-    const audio = audioRef.current;
-    audio.src = pageData.audio_url;
-    audio.load();
+  const tryStartPlayback = useCallback((audio: HTMLAudioElement) => {
+    if (!pendingPlayRef.current && !autoPlayAfterLoadRef.current) return;
 
-    const onMeta = () => {
-      setDuration(audio.duration || 0);
-      const resume = lastSavedPositionRef.current;
-      if (resume > 0 && resume < (audio.duration || 0)) {
-        audio.currentTime = resume;
+    pendingPlayRef.current = false;
+    autoPlayAfterLoadRef.current = false;
+
+    audio
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch((err) => {
+        console.error("[player] autoplay failed:", err);
+        setPlayError("Could not start playback. Press play to retry.");
+        setIsPlaying(false);
+      });
+  }, []);
+
+  const bindAudioElement = useCallback(
+    (audio: HTMLAudioElement | null) => {
+      audioListenersCleanupRef.current?.();
+      audioListenersCleanupRef.current = null;
+
+      audioRef.current = audio;
+      if (!audio) {
+        loadedAudioUrlRef.current = null;
+        return;
       }
-      lastSavedPositionRef.current = 0;
-      if (isPlaying) {
-        audio.play().catch(() => {
-          /* autoplay blocked */
-        });
+
+      const url = pageData?.audio_url;
+      if (!url) return;
+
+      const srcMatches =
+        loadedAudioUrlRef.current === url &&
+        (audio.src === url ||
+          audio.src.endsWith(url.split("/").pop() || "__none__"));
+
+      if (!srcMatches) {
+        audio.pause();
+        audio.currentTime = 0;
+        setCurrentTime(0);
+        setActiveWordIndex(-1);
+        audio.src = url;
+        audio.load();
+        loadedAudioUrlRef.current = url;
+        setAudioReady(false);
       }
-    };
-    audio.addEventListener("loadedmetadata", onMeta);
-    return () => audio.removeEventListener("loadedmetadata", onMeta);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageData?.audio_url]);
+
+      const pageWords = pageData?.timestamps_json
+        ? buildWordsFromTimestamps(pageData.timestamps_json)
+        : [];
+
+      const onMeta = () => {
+        const dur = audio.duration || 0;
+        setDuration(dur);
+
+        if (shouldResumePositionRef.current) {
+          const resume = resumePositionRef.current;
+          if (resume > 0 && resume < dur - 0.05) {
+            audio.currentTime = resume;
+            setCurrentTime(resume);
+            setActiveWordIndex(findActiveWordIndex(pageWords, resume));
+          }
+          shouldResumePositionRef.current = false;
+          resumePositionRef.current = 0;
+        } else if (!srcMatches) {
+          audio.currentTime = 0;
+          setCurrentTime(0);
+          setActiveWordIndex(-1);
+        }
+      };
+
+      const onCanPlay = () => {
+        setAudioReady(true);
+        setPlayError(null);
+        tryStartPlayback(audio);
+      };
+
+      const onError = () => {
+        setAudioReady(false);
+        setPlayError("Failed to load audio for this page.");
+        setIsPlaying(false);
+      };
+
+      audio.addEventListener("loadedmetadata", onMeta);
+      audio.addEventListener("canplay", onCanPlay);
+      audio.addEventListener("error", onError);
+
+      audioListenersCleanupRef.current = () => {
+        audio.removeEventListener("loadedmetadata", onMeta);
+        audio.removeEventListener("canplay", onCanPlay);
+        audio.removeEventListener("error", onError);
+      };
+
+      if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        setAudioReady(true);
+        if (audio.duration) setDuration(audio.duration);
+        tryStartPlayback(audio);
+      }
+    },
+    [pageData?.audio_url, tryStartPlayback]
+  );
+
+  // Re-bind when page audio URL changes (same element, new page)
+  useEffect(() => {
+    if (audioRef.current && pageData?.audio_url) {
+      bindAudioElement(audioRef.current);
+    }
+  }, [pageData?.audio_url, bindAudioElement]);
 
   // ----- Audio time updates: word highlight + lazy next page trigger -----
   const handleTimeUpdate = useCallback(() => {
@@ -223,27 +346,9 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     const t = audio.currentTime;
     setCurrentTime(t);
 
-    // Find active word
     if (words.length) {
-      // Most updates advance forward, so do a small linear search from prev
-      const prev = activeWordIndex >= 0 ? activeWordIndex : 0;
-      let found = -1;
-      for (let i = prev; i < words.length; i++) {
-        if (t >= words[i].start && t <= words[i].end) {
-          found = i;
-          break;
-        }
-        if (words[i].start > t) {
-          found = Math.max(0, i - 1);
-          break;
-        }
-      }
-      if (found === -1 && t >= (words[words.length - 1]?.end || 0)) {
-        found = words.length - 1;
-      }
-      if (found !== -1 && found !== activeWordIndex) {
-        setActiveWordIndex(found);
-      }
+      const found = findActiveWordIndex(words, t);
+      setActiveWordIndex((prev) => (found !== prev ? found : prev));
     }
 
     // Lazy next-page trigger: <= 30 s remaining and we have a next page
@@ -289,38 +394,96 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       lastSaveAtRef.current = now;
       api.saveSession(storyId, currentPage, t).catch(() => {});
     }
-  }, [words, activeWordIndex, story, currentPage, storyId]);
+  }, [words, story, currentPage, storyId]);
 
   // ----- Audio ended: auto-advance -----
   const handleEnded = useCallback(() => {
     if (story && currentPage < story.total_pages) {
+      autoPlayAfterLoadRef.current = true;
+      pendingPlayRef.current = true;
+      shouldResumePositionRef.current = false;
+      resumePositionRef.current = 0;
       setCurrentPage((p) => p + 1);
-      setIsPlaying(true);
     } else {
+      autoPlayAfterLoadRef.current = false;
+      pendingPlayRef.current = false;
       setIsPlaying(false);
     }
   }, [story, currentPage]);
 
+  const startPlayback = useCallback(async () => {
+    const url = pageData?.audio_url;
+    if (!url) {
+      setPlayError("Audio is still generating for this page.");
+      return;
+    }
+
+    let audio = audioRef.current;
+    if (!audio) {
+      setPlayError("Audio player not ready. Refresh the page.");
+      return;
+    }
+
+    if (loadedAudioUrlRef.current !== url && pageData?.audio_url) {
+      bindAudioElement(audio);
+    }
+
+    setPlayError(null);
+
+    pendingPlayRef.current = true;
+    autoPlayAfterLoadRef.current = false;
+
+    try {
+      await audio.play();
+      pendingPlayRef.current = false;
+      setIsPlaying(true);
+    } catch (err) {
+      // Source may still be buffering — retry when canplay fires
+      if (audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        return;
+      }
+      pendingPlayRef.current = false;
+      console.error("[player] play failed:", err);
+      setPlayError("Could not play audio. Check your browser audio settings.");
+      setIsPlaying(false);
+    }
+  }, [pageData?.audio_url, bindAudioElement]);
+
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (audio.paused) {
-      audio
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    } else {
+
+    // Use element state as source of truth (avoids desync after auto page change)
+    const actuallyPlaying = !audio.paused && !audio.ended;
+
+    if (actuallyPlaying) {
+      autoPlayAfterLoadRef.current = false;
+      pendingPlayRef.current = false;
       audio.pause();
       setIsPlaying(false);
       api.saveSession(storyId, currentPage, audio.currentTime).catch(() => {});
+      return;
     }
-  }, [storyId, currentPage]);
 
-  const seekTo = useCallback((seconds: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = Math.max(0, Math.min(audio.duration || 0, seconds));
-  }, []);
+    void startPlayback();
+  }, [storyId, currentPage, startPlayback]);
+
+  const handlePlay = useCallback(() => setIsPlaying(true), []);
+  const handlePause = useCallback(() => setIsPlaying(false), []);
+
+  const seekTo = useCallback(
+    (seconds: number) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      const t = Math.max(0, Math.min(audio.duration || 0, seconds));
+      audio.currentTime = t;
+      setCurrentTime(t);
+      if (words.length) {
+        setActiveWordIndex(findActiveWordIndex(words, t));
+      }
+    },
+    [words]
+  );
 
   const goToPage = useCallback(
     (n: number) => {
@@ -330,8 +493,17 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       const audio = audioRef.current;
       if (audio) {
         audio.pause();
+        audio.currentTime = 0;
       }
-      lastSavedPositionRef.current = 0;
+      pendingPlayRef.current = false;
+      autoPlayAfterLoadRef.current = false;
+      shouldResumePositionRef.current = false;
+      resumePositionRef.current = 0;
+      loadedAudioUrlRef.current = null;
+      setAudioReady(false);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setActiveWordIndex(-1);
       setCurrentPage(target);
     },
     [story, currentPage]
@@ -360,8 +532,15 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [storyId, currentPage]);
 
+  // Enable play when page audio exists; click handler loads/buffers if needed.
+  const canPlay =
+    Boolean(pageData?.audio_url) &&
+    pageData?.status === "ready" &&
+    !pageLoading;
+
   return {
     audioRef,
+    bindAudioElement,
     story,
     characters,
     pageData,
@@ -373,9 +552,13 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     nextPageStatus,
     error,
     pageLoading,
+    playError,
+    canPlay,
     words,
     handleTimeUpdate,
     handleEnded,
+    handlePlay,
+    handlePause,
     togglePlay,
     seekTo,
     goToPage,

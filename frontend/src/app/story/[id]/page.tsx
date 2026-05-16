@@ -62,12 +62,13 @@ export default function StoryPlayerPage() {
   return (
     <main className="pt-[140px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
       <audio
-        ref={player.audioRef}
+        ref={player.bindAudioElement}
         onTimeUpdate={player.handleTimeUpdate}
         onEnded={player.handleEnded}
-        onPlay={() => {}}
-        onPause={() => {}}
+        onPlay={player.handlePlay}
+        onPause={player.handlePause}
         preload="auto"
+        playsInline
       />
 
       <header className="flex items-start justify-between gap-6 mb-8">
@@ -118,9 +119,20 @@ export default function StoryPlayerPage() {
               <StoryText
                 words={player.words}
                 activeIndex={player.activeWordIndex}
+                fallbackText={
+                  player.pageData?.raw_segments
+                    ?.map((s) => s.text)
+                    .join(" ") ?? undefined
+                }
               />
             )}
           </motion.div>
+
+          {player.playError && (
+            <p className="text-center font-label-sm text-label-sm text-error mb-2">
+              {player.playError}
+            </p>
+          )}
 
           <PlayerControls
             isPlaying={player.isPlaying}
@@ -129,6 +141,8 @@ export default function StoryPlayerPage() {
             currentPage={player.currentPage}
             totalPages={player.story.total_pages}
             nextPageStatus={player.nextPageStatus}
+            canPlay={player.canPlay}
+            pageLoading={player.pageLoading}
             onTogglePlay={player.togglePlay}
             onSeek={player.seekTo}
             onPrev={() => player.goToPage(player.currentPage - 1)}

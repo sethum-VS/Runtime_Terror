@@ -31,11 +31,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-    supabase.auth.getSession().then(({ data }) => {
+
+    const init = async () => {
+      // Complete email/OAuth redirect (?code=...) so access_token is available for API calls
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) {
+            window.history.replaceState({}, "", window.location.pathname);
+          }
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setIsLoading(false);
-    });
+    };
+
+    void init();
 
     const {
       data: { subscription },

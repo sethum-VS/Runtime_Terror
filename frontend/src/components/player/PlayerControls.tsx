@@ -7,6 +7,8 @@ interface PlayerControlsProps {
   currentPage: number;
   totalPages: number;
   nextPageStatus: "idle" | "generating" | "ready";
+  canPlay?: boolean;
+  pageLoading?: boolean;
   onTogglePlay: () => void;
   onSeek: (s: number) => void;
   onPrev: () => void;
@@ -20,12 +22,15 @@ export function PlayerControls({
   currentPage,
   totalPages,
   nextPageStatus,
+  canPlay = true,
+  pageLoading = false,
   onTogglePlay,
   onSeek,
   onPrev,
   onNext,
 }: PlayerControlsProps) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const playDisabled = pageLoading || (!canPlay && !isPlaying);
 
   return (
     <div className="glass-panel bg-surface/80 rounded-xl p-6 shadow-[0_20px_40px_rgba(0,0,0,0.06)]">
@@ -71,7 +76,8 @@ export function PlayerControls({
 
         <button
           onClick={onTogglePlay}
-          className="w-16 h-16 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_10px_20px_rgba(3,31,65,0.25)] hover:scale-105 transition-all"
+          disabled={playDisabled && !isPlaying}
+          className="w-16 h-16 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_10px_20px_rgba(3,31,65,0.25)] hover:scale-105 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
           aria-label={isPlaying ? "Pause" : "Play"}
         >
           <span className="material-symbols-outlined text-[36px]">
