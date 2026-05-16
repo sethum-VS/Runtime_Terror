@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
@@ -33,6 +33,25 @@ export function HeroSection() {
   const [processing, setProcessing] = useState(false);
   const [status, setStatus] = useState<StoryStatus | "">("");
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear any active polling on unmount so we don't leak intervals or call
+  // setState on an unmounted component (which can silently freeze the UI).
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, []);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -56,24 +75,37 @@ export function HeroSection() {
       setProcessing(true);
       setStatus(story.status as StoryStatus);
 
-      const interval = setInterval(async () => {
+      // Poll status. The backend transitions through some statuses very
+      // quickly (e.g. `parsed` → `profiling` happens in milliseconds), so we
+      // poll at 1s and also fire an immediate first poll so users actually
+      // see the steps advancing rather than appearing "stuck".
+      stopPolling();
+      let stopped = false;
+      const tick = async () => {
+        if (stopped) return;
         try {
           const s = await api.getStory(story.id);
+          if (stopped) return;
           setStatus(s.status as StoryStatus);
           if (s.status === "ready") {
-            clearInterval(interval);
+            stopped = true;
+            stopPolling();
             router.push(`/story/${story.id}`);
           } else if (s.status === "failed") {
-            clearInterval(interval);
+            stopped = true;
+            stopPolling();
             setProcessing(false);
             setError(s.error_message || "Processing failed. Please try again.");
           }
         } catch (e) {
-          clearInterval(interval);
+          stopped = true;
+          stopPolling();
           setProcessing(false);
           setError(e instanceof Error ? e.message : "Polling failed");
         }
-      }, 2000);
+      };
+      void tick();
+      pollRef.current = setInterval(tick, 1000);
     } catch (e) {
       setUploading(false);
       const msg = e instanceof Error ? e.message : "Upload failed";
@@ -281,8 +313,16 @@ function ProcessingPanel({
                     : "text-on-surface-variant/60"
               }`}
             >
-              <span className="material-symbols-outlined text-[18px]">
-                {isDone ? "check_circle" : isActive ? "progress_activity" : "radio_button_unchecked"}
+              <span
+                className={`material-symbols-outlined text-[18px] ${
+                  isActive ? "animate-spin" : ""
+                }`}
+              >
+                {isDone
+                  ? "check_circle"
+                  : isActive
+                    ? "progress_activity"
+                    : "radio_button_unchecked"}
               </span>
               {STATUS_LABELS[s]}
             </li>
