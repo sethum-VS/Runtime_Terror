@@ -17,7 +17,11 @@ interface AuthContextValue {
   session: SupaSession | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
 }
@@ -76,11 +80,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(
     async (email: string, password: string, fullName: string) => {
       const supabase = getSupabaseClient();
-      const { error } = await supabase.auth.signUp({ email, password });
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/auth/sign-in`
+          : undefined;
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectTo,
+          data: { full_name: fullName },
+        },
+      });
       if (error) throw error;
-      try {
-        await api.updateProfile({ full_name: fullName });
-      } catch {}
+
+      const needsEmailConfirmation = !data.session;
+      if (data.session) {
+        try {
+          await api.updateProfile({ full_name: fullName });
+        } catch {}
+      }
+      return { needsEmailConfirmation };
     },
     []
   );

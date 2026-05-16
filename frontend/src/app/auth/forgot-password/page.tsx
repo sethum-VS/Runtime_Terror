@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { formatAuthError } from "@/lib/authErrors";
 
 export default function ForgotPasswordPage() {
   const { resetPassword, user, isLoading } = useAuth();
@@ -25,7 +26,7 @@ export default function ForgotPasswordPage() {
       await resetPassword(email);
       setSuccess(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(formatAuthError(err));
     } finally {
       setSubmitting(false);
     }

@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { formatAuthError } from "@/lib/authErrors";
 
 export default function SignUpPage() {
   const { signUp, user, isLoading } = useAuth();
@@ -14,6 +15,7 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export default function SignUpPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -39,10 +42,20 @@ export default function SignUpPage() {
 
     setSubmitting(true);
     try {
-      await signUp(email, password, fullName);
+      const { needsEmailConfirmation } = await signUp(
+        email,
+        password,
+        fullName
+      );
+      if (needsEmailConfirmation) {
+        setSuccess(
+          `We sent a confirmation link to ${email}. Open it to activate your account, then sign in.`
+        );
+        return;
+      }
       router.push("/profile");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      setError(formatAuthError(err));
     } finally {
       setSubmitting(false);
     }
@@ -70,6 +83,12 @@ export default function SignUpPage() {
             Join VoiceTale and start listening
           </p>
         </div>
+
+        {success && (
+          <div className="bg-secondary-container text-on-secondary-container rounded-xl px-4 py-3 mb-6 font-body-md">
+            {success}
+          </div>
+        )}
 
         {error && (
           <div className="bg-error-container text-on-error-container rounded-xl px-4 py-3 mb-6 font-body-md">
