@@ -9,12 +9,17 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@elevenlabs/client": "^1.7.0",
+    "@elevenlabs/react": "^1.6.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "framer-motion": "^11.11.17",
     "next": "^15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "overrides": {
+    "livekit-client": "2.16.1"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -574,6 +574,18 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const handlePlay = useCallback(() => setIsPlaying(true), []);
   const handlePause = useCallback(() => setIsPlaying(false), []);
 
+  const pauseAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const resumeAudio = useCallback(() => {
+    void startPlayback();
+  }, [startPlayback]);
+
   const seekToWord = useCallback(
     (index: number) => {
       const w = words[index];
@@ -681,5 +693,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     seekTo,
     seekToWord,
     goToPage,
+    pauseAudio,
+    resumeAudio,
   };
 }

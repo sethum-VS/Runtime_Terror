@@ -96,3 +96,8 @@ export interface BookmarkEntry {
   is_showcase: boolean;
   created_at: string | null;
 }
+
+export interface ConversationStartResponse {
+  signed_url: string;
+  agent_id: string;
+}
