@@ -40,15 +40,15 @@ export default function RootLayout({
           href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
         />
-        {/* Material Symbols — display=block hides ligature text until glyph ready */}
+        {/* Material Symbols — display=swap satisfies Next font guidance; .fonts-ready script still gates icon paint */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font -- icon font not available via next/font */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         />
         {/* Mark <html> with .fonts-ready once Material Symbols actually loaded.
             CSS hides icon text until then — no raw ligature flash. */}
         <script
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{
             __html: `(function(){try{if(document.fonts&&document.fonts.load){document.fonts.load("24px 'Material Symbols Outlined'").then(function(){document.documentElement.classList.add('fonts-ready');}).catch(function(){document.documentElement.classList.add('fonts-ready');});setTimeout(function(){document.documentElement.classList.add('fonts-ready');},3000);}else{document.documentElement.classList.add('fonts-ready');}}catch(e){document.documentElement.classList.add('fonts-ready');}})();`,
           }}
