@@ -5,15 +5,29 @@ import type {
   PageSummary,
   Session,
   Voice,
+  UserProfile,
+  BookmarkEntry,
 } from "./types";
-
-// Empty string = same-origin requests via Next.js rewrite (avoids CORS in local dev).
 const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const { getSupabaseClient } = await import("./supabaseClient");
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch {}
+  return {};
+}
+
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
+      ...authHeaders,
       ...(init?.headers || {}),
       ...(init?.body && !(init.body instanceof FormData)
         ? { "Content-Type": "application/json" }
@@ -91,6 +105,37 @@ export const api = {
 
   async listVoices(): Promise<Voice[]> {
     return jsonFetch<Voice[]>("/api/voices");
+  },
+
+  async getProfile() {
+    return jsonFetch<UserProfile>("/api/profile");
+  },
+
+  async updateProfile(data: Partial<UserProfile>) {
+    return jsonFetch<UserProfile>("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async listBookmarks() {
+    return jsonFetch<BookmarkEntry[]>("/api/bookmarks");
+  },
+
+  async addBookmark(storyId: string) {
+    return jsonFetch<{ status: string }>(`/api/bookmarks/${storyId}`, {
+      method: "POST",
+    });
+  },
+
+  async removeBookmark(storyId: string) {
+    return jsonFetch<{ status: string }>(`/api/bookmarks/${storyId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async checkBookmark(storyId: string) {
+    return jsonFetch<{ bookmarked: boolean }>(`/api/bookmarks/${storyId}`);
   },
 };
 

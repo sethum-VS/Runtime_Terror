@@ -5,6 +5,8 @@ from supabase import create_client, Client
 from elevenlabs.client import ElevenLabs
 import vertexai
 from vertexai.generative_models import GenerativeModel
+from fastapi import Header, HTTPException
+from jose import jwt, JWTError
 
 from app.config import get_settings
 
@@ -72,3 +74,32 @@ def get_gemini() -> GenerativeModel:
 
 
 elevenlabs_semaphore = asyncio.Semaphore(settings.elevenlabs_max_concurrent)
+
+
+async def get_current_user(authorization: str | None = Header(None)) -> dict | None:
+    """Decode Supabase JWT. Returns {"user_id": ..., "role": ...} or None if no/invalid token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ", 1)[1]
+    secret = get_settings().supabase_jwt_secret
+    if not secret:
+        return None
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        sb = get_supabase()
+        profile = sb.table("user_profiles").select("role").eq("user_id", user_id).execute()
+        role = profile.data[0]["role"] if profile.data else "user"
+        return {"user_id": user_id, "role": role}
+    except JWTError:
+        return None
+
+
+async def get_required_user(authorization: str | None = Header(None)) -> dict:
+    """Like get_current_user but raises 401 if not authenticated."""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user

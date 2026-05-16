@@ -1,21 +1,30 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.dependencies import get_supabase
+from app.dependencies import get_supabase, get_current_user, get_required_user
 from app.models.schemas import SessionResponse, SessionUpdate
 
 router = APIRouter()
 
 
 @router.get("/stories/{story_id}/session", response_model=SessionResponse)
-async def get_session(story_id: str):
+async def get_session(
+    story_id: str,
+    user: dict | None = Depends(get_current_user),
+):
     """Get last_page + last_position for refresh recovery."""
     supabase = get_supabase()
-    result = (
-        supabase.table("story_sessions")
-        .select("*")
-        .eq("story_id", story_id)
-        .execute()
-    )
+
+    if user:
+        result = (
+            supabase.table("story_sessions")
+            .select("*")
+            .eq("story_id", story_id)
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+    else:
+        return SessionResponse(story_id=story_id, last_page=1, last_position=0.0)
+
     if not result.data:
         return SessionResponse(story_id=story_id, last_page=1, last_position=0.0)
     s = result.data[0]
@@ -27,13 +36,18 @@ async def get_session(story_id: str):
 
 
 @router.put("/stories/{story_id}/session")
-async def update_session(story_id: str, data: SessionUpdate):
+async def update_session(
+    story_id: str,
+    data: SessionUpdate,
+    user: dict = Depends(get_required_user),
+):
     """Save current page + position. Called on pause/page-change/before-unload."""
     supabase = get_supabase()
     supabase.table("story_sessions").upsert({
         "story_id": story_id,
+        "user_id": user["user_id"],
         "last_page": data.last_page,
         "last_position": data.last_position,
         "updated_at": "now()",
-    }, on_conflict="story_id").execute()
+    }, on_conflict="story_id,user_id").execute()
     return {"status": "saved"}

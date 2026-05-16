@@ -3,6 +3,7 @@ import { Manrope, Libre_Caslon_Text } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { AppProviders } from "@/components/providers/AppProviders";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -38,9 +39,11 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-background text-on-background font-body-md overflow-x-hidden cinematic-bg min-h-screen flex flex-col">
-        <Navbar />
-        <div className="flex-1 flex flex-col">{children}</div>
-        <Footer />
+        <AppProviders>
+          <Navbar />
+          <div className="flex-1 flex flex-col">{children}</div>
+          <Footer />
+        </AppProviders>
       </body>
     </html>
   );

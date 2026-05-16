@@ -27,6 +27,8 @@ class StoryResponse(BaseModel):
     status: str
     total_pages: int
     error_message: Optional[str] = None
+    is_showcase: bool = False
+    user_id: Optional[str] = None
 
 
 class PageResponse(BaseModel):
@@ -67,6 +69,33 @@ class CharacterResponse(BaseModel):
 class DialogueInput(BaseModel):
     voice_id: str
     text: str
+
+
+class UserProfileResponse(BaseModel):
+    user_id: str
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    preferred_narrator_voice: Optional[str] = None
+    preferred_reading_theme: Optional[str] = None
+    role: str = "user"
+
+
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    preferred_narrator_voice: Optional[str] = None
+    preferred_reading_theme: Optional[str] = None
+
+
+class BookmarkResponse(BaseModel):
+    story_id: str
+    title: str
+    status: str
+    total_pages: int
+    is_showcase: bool = False
+    created_at: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

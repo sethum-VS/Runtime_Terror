@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Story } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
+import { useReadingLibrary } from "@/context/ReadingLibraryContext";
 
 export default function LibraryPage() {
   const [stories, setStories] = useState<Story[] | null>(null);
+  const { user } = useAuth();
+  const { isSaved, toggleSaved } = useReadingLibrary();
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api
@@ -14,6 +19,18 @@ export default function LibraryPage() {
       .then(setStories)
       .catch(() => setStories([]));
   }, []);
+
+  async function handleToggleBookmark(storyId: string) {
+    setTogglingIds((prev) => new Set(prev).add(storyId));
+    try {
+      await toggleSaved(storyId);
+    } catch {}
+    setTogglingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(storyId);
+      return next;
+    });
+  }
 
   return (
     <main className="pt-[160px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
@@ -29,6 +46,23 @@ export default function LibraryPage() {
           start a new tale.
         </p>
       </header>
+
+      {!user && (
+        <div className="glass-panel bg-primary-container/40 rounded-xl px-6 py-4 mb-8 flex items-center gap-3">
+          <span className="material-symbols-outlined text-[24px] text-primary">
+            info
+          </span>
+          <p className="font-body-md text-on-surface-variant">
+            <Link
+              href="/auth/sign-in"
+              className="text-secondary hover:underline font-label-md"
+            >
+              Sign in
+            </Link>{" "}
+            to upload your own stories and save your favorites.
+          </p>
+        </div>
+      )}
 
       {stories === null && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
@@ -67,10 +101,9 @@ export default function LibraryPage() {
       {stories && stories.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
           {stories.map((s) => (
-            <Link
+            <div
               key={s.id}
-              href={`/story/${s.id}`}
-              className="glass-panel bg-surface/60 rounded-xl p-6 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] transition-all duration-300"
+              className="glass-panel bg-surface/60 rounded-xl p-6 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
@@ -78,15 +111,33 @@ export default function LibraryPage() {
                     auto_stories
                   </span>
                 </div>
-                <StatusBadge status={s.status} />
+                <div className="flex items-center gap-2">
+                  {user && (
+                    <button
+                      onClick={() => handleToggleBookmark(s.id)}
+                      disabled={togglingIds.has(s.id)}
+                      className="text-primary hover:scale-110 transition-transform disabled:opacity-50"
+                      aria-label={
+                        isSaved(s.id) ? "Remove bookmark" : "Add bookmark"
+                      }
+                    >
+                      <span className="material-symbols-outlined">
+                        {isSaved(s.id) ? "bookmark" : "bookmark_border"}
+                      </span>
+                    </button>
+                  )}
+                  <StatusBadge status={s.status} />
+                </div>
               </div>
-              <h3 className="font-title-lg text-title-lg text-primary mb-1 line-clamp-2">
-                {s.title}
-              </h3>
-              <p className="font-body-md text-on-surface-variant">
-                {s.total_pages} {s.total_pages === 1 ? "page" : "pages"}
-              </p>
-            </Link>
+              <Link href={`/story/${s.id}`} className="flex-1">
+                <h3 className="font-title-lg text-title-lg text-primary mb-1 line-clamp-2">
+                  {s.title}
+                </h3>
+                <p className="font-body-md text-on-surface-variant">
+                  {s.total_pages} {s.total_pages === 1 ? "page" : "pages"}
+                </p>
+              </Link>
+            </div>
           ))}
         </div>
       )}
@@ -96,14 +147,35 @@ export default function LibraryPage() {
 
 function StatusBadge({ status }: { status: Story["status"] }) {
   const map: Record<Story["status"], { label: string; cls: string }> = {
-    uploaded: { label: "Uploaded", cls: "bg-surface-variant text-on-surface-variant" },
-    parsing: { label: "Parsing", cls: "bg-secondary-container text-on-secondary-container" },
-    parsed: { label: "Parsed", cls: "bg-secondary-container text-on-secondary-container" },
-    profiling: { label: "Casting voices", cls: "bg-secondary-container text-on-secondary-container" },
-    profiled: { label: "Voices ready", cls: "bg-primary-container text-on-primary-container" },
-    generating_page1: { label: "Generating", cls: "bg-secondary-container text-on-secondary-container" },
+    uploaded: {
+      label: "Uploaded",
+      cls: "bg-surface-variant text-on-surface-variant",
+    },
+    parsing: {
+      label: "Parsing",
+      cls: "bg-secondary-container text-on-secondary-container",
+    },
+    parsed: {
+      label: "Parsed",
+      cls: "bg-secondary-container text-on-secondary-container",
+    },
+    profiling: {
+      label: "Casting voices",
+      cls: "bg-secondary-container text-on-secondary-container",
+    },
+    profiled: {
+      label: "Voices ready",
+      cls: "bg-primary-container text-on-primary-container",
+    },
+    generating_page1: {
+      label: "Generating",
+      cls: "bg-secondary-container text-on-secondary-container",
+    },
     ready: { label: "Ready", cls: "bg-primary text-on-primary" },
-    failed: { label: "Failed", cls: "bg-error-container text-on-error-container" },
+    failed: {
+      label: "Failed",
+      cls: "bg-error-container text-on-error-container",
+    },
   };
   const { label, cls } = map[status];
   return (
