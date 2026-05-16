@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { api } from "@/lib/api";
 import type { Voice } from "@/lib/types";
+import { pickPageVariants } from "@/lib/animations";
 
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[] | null>(null);
   const [search, setSearch] = useState("");
+  const reduced = useReducedMotion();
+  const { item } = pickPageVariants(reduced);
 
   useEffect(() => {
     api
@@ -23,7 +27,7 @@ export default function VoicesPage() {
 
   return (
     <main className="pt-[160px] pb-section-margin px-container-padding-mobile md:px-container-padding-desktop max-w-[1280px] mx-auto">
-      <header className="mb-10">
+      <motion.header variants={item} className="mb-10">
         <p className="font-label-sm text-label-sm uppercase tracking-widest text-secondary mb-2">
           ElevenLabs Voice Library
         </p>
@@ -50,21 +54,27 @@ export default function VoicesPage() {
             </div>
           </div>
         ) : null}
-      </header>
+      </motion.header>
 
       {voices === null && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
+        <motion.div
+          variants={item}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap"
+        >
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
               className="glass-panel bg-surface/50 rounded-xl p-6 h-32 shimmer"
             />
           ))}
-        </div>
+        </motion.div>
       )}
 
       {voices && voices.length === 0 && (
-        <div className="glass-panel bg-surface/60 rounded-xl p-12 text-center max-w-xl mx-auto">
+        <motion.div
+          variants={item}
+          className="glass-panel bg-surface/60 rounded-xl p-12 text-center max-w-xl mx-auto"
+        >
           <span className="material-symbols-outlined text-[48px] text-on-surface-variant mb-3 block">
             record_voice_over
           </span>
@@ -76,21 +86,27 @@ export default function VoicesPage() {
             voices are added on our side—nothing for you to upload here. Check
             back later, or continue creating stories from the Upload page.
           </p>
-        </div>
+        </motion.div>
       )}
 
       {voices && voices.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
+        <motion.div
+          variants={item}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap"
+        >
           {filtered.map((v) => (
             <VoiceCard key={v.voice_id} voice={v} />
           ))}
-        </div>
+        </motion.div>
       )}
 
       {voices && voices.length > 0 && filtered.length === 0 && (
-        <p className="text-on-surface-variant mt-8 font-body-md">
+        <motion.p
+          variants={item}
+          className="text-on-surface-variant mt-8 font-body-md"
+        >
           No voices match your search.
-        </p>
+        </motion.p>
       )}
     </main>
   );

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Hide floating Next.js Dev Tools badge in dev (still shows on errors)
+  devIndicators: false,
   reactStrictMode: true,
   images: {
     remotePatterns: [
