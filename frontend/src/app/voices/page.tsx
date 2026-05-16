@@ -6,14 +6,13 @@ import type { Voice } from "@/lib/types";
 
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     api
       .listVoices()
       .then(setVoices)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch(() => setVoices([]));
   }, []);
 
   const filtered = (voices || []).filter((v) =>
@@ -36,28 +35,24 @@ export default function VoicesPage() {
           or designs the right voice per character.
         </p>
 
-        <div className="mt-6 max-w-md">
-          <div className="glass-panel bg-surface/60 rounded-full px-5 py-3 flex items-center gap-3">
-            <span className="material-symbols-outlined text-on-surface-variant">
-              search
-            </span>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, accent, age…"
-              className="flex-1 bg-transparent outline-none font-body-md text-body-md placeholder:text-on-surface-variant/60"
-            />
+        {voices === null || voices.length > 0 ? (
+          <div className="mt-6 max-w-md">
+            <div className="glass-panel bg-surface/60 rounded-full px-5 py-3 flex items-center gap-3">
+              <span className="material-symbols-outlined text-on-surface-variant">
+                search
+              </span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, accent, age…"
+                className="flex-1 bg-transparent outline-none font-body-md text-body-md placeholder:text-on-surface-variant/60"
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
       </header>
 
-      {error && (
-        <div className="glass-panel bg-error-container/40 rounded-xl p-4 text-on-error-container mb-6">
-          {error}
-        </div>
-      )}
-
-      {!voices && !error && (
+      {voices === null && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div
@@ -68,7 +63,23 @@ export default function VoicesPage() {
         </div>
       )}
 
-      {voices && (
+      {voices && voices.length === 0 && (
+        <div className="glass-panel bg-surface/60 rounded-xl p-12 text-center max-w-xl mx-auto">
+          <span className="material-symbols-outlined text-[48px] text-on-surface-variant mb-3 block">
+            record_voice_over
+          </span>
+          <h3 className="font-title-lg text-title-lg text-primary mb-2">
+            Voice catalog coming soon
+          </h3>
+          <p className="font-body-md text-on-surface-variant">
+            The Explore Voices library is curated by the VoiceTale team. New
+            voices are added on our side—nothing for you to upload here. Check
+            back later, or continue creating stories from the Upload page.
+          </p>
+        </div>
+      )}
+
+      {voices && voices.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-card-gap">
           {filtered.map((v) => (
             <VoiceCard key={v.voice_id} voice={v} />
@@ -76,7 +87,7 @@ export default function VoicesPage() {
         </div>
       )}
 
-      {voices && filtered.length === 0 && (
+      {voices && voices.length > 0 && filtered.length === 0 && (
         <p className="text-on-surface-variant mt-8 font-body-md">
           No voices match your search.
         </p>

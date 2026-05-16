@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Manrope, Libre_Caslon_Text } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -36,9 +37,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         />
       </head>
-      <body className="bg-background text-on-background font-body-md overflow-x-hidden cinematic-bg min-h-screen">
+      <body className="bg-background text-on-background font-body-md overflow-x-hidden cinematic-bg min-h-screen flex flex-col">
         <Navbar />
-        {children}
+        <div className="flex-1 flex flex-col">{children}</div>
+        <Footer />
       </body>
     </html>
   );
