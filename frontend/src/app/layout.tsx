@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${libreCaslon.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${libreCaslon.variable}`} suppressHydrationWarning>
       <head>
         {/* Speed up Google Fonts handshake */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
