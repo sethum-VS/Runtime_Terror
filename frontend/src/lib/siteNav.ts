@@ -1,6 +1,6 @@
 /** Primary routes — shared by Navbar and Footer so links stay aligned. */
 export const SITE_NAV_LINKS = [
-  { href: "/", label: "Upload" },
+  { href: "/", label: "Home" },
   { href: "/library", label: "My Library" },
   { href: "/voices", label: "Explore Voices" },
   { href: "/about", label: "About" },

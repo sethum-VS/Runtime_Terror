@@ -161,7 +161,10 @@ async def start_conversation(story_id: str, body: ConversationStartRequest):
                         "temperature": 0.7,
                     },
                 },
-                "tts": {"voice_id": narrator_voice},
+                "tts": {
+                    "voice_id": narrator_voice,
+                    "model_id": settings.elevenlabs_convai_tts_model,
+                },
             },
         )
     except Exception as e:

@@ -10,6 +10,7 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 2. Designs a unique ElevenLabs voice per character
 3. Generates page-by-page audio (lazily — only as the user reads)
 4. Plays back with **word-by-word read-along highlighting** synced to ElevenLabs timestamps
+5. Lets readers **talk to the narrator** in real time (ElevenLabs Conversational AI)
 
 ---
 
@@ -19,6 +20,7 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 - **Lazy Audio Generation** — pages generate on demand, saving ~70% ElevenLabs credits
 - **Read-Along Highlighting** — word-level sync from ElevenLabs alignment data
 - **Session Recovery** — refresh the page and resume exactly where you left off
+- **Talk to Narrator** — real-time voice Q&A on the story player; uses ElevenLabs **Turbo v2** TTS (English agents) for low-latency, natural back-and-forth (override with **Flash v2** for minimum latency)
 
 ## Tech Stack
 
@@ -26,8 +28,9 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 |--------------|--------------------------------------------------------------|
 | Frontend     | Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion |
 | Backend      | Python FastAPI (async)                                       |
-| LLMs         | Gemini 2.5 Flash via **Vertex AI** (service account / ADC)   |
-| Voice / TTS  | ElevenLabs — Text-to-Dialogue, Voice Design, Voice Library, Audio Tags |
+| Story LLM    | Gemini 2.5 Flash via **Vertex AI** (service account / ADC)   |
+| Voice / TTS  | ElevenLabs — Text-to-Dialogue, Voice Design, Voice Library, Audio Tags, ConvAI (Turbo/Flash v2) |
+| Narrator LLM | Gemini via **ElevenLabs ConvAI** (`ELEVENLABS_CONVAI_MODEL`, default `gemini-2.0-flash`) |
 | Database     | Supabase (PostgreSQL + Storage)                              |
 | Deployment   | Vercel (frontend) + GCP Cloud Run (backend)                  |
 
@@ -37,6 +40,20 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 2. **Voice Design** — synthesize unique character voices from text descriptions
 3. **Voice Library** — match existing voices when a good fit exists (saves credits)
 4. **Audio Tags** — `[whispers]`, `[laughs]`, `[speaks firmly]` for emotional delivery
+5. **Conversational AI (ConvAI)** — ephemeral narrator agents per story session; signed URLs so the API key stays on the backend
+
+### Narrator voice agent (low-latency TTS)
+
+Per [ElevenLabs guidance](https://elevenlabs.io/docs), real-time agents should use **Flash** or **Turbo** low-latency TTS. VoiceTale’s narrator is **English** (`language: "en"`), so the API requires **v2** models (not v2.5):
+
+| Model ID | Latency | Use when |
+|----------|---------|----------|
+| `eleven_turbo_v2` | ~250–300ms | **Default** — best balance of speed and natural voice quality |
+| `eleven_flash_v2` | ~75ms | Lowest latency for English |
+
+For multilingual agents, use `eleven_turbo_v2_5` or `eleven_flash_v2_5` instead.
+
+Set `ELEVENLABS_CONVAI_TTS_MODEL` in `backend/.env`. The agent’s reasoning model is separate (`ELEVENLABS_CONVAI_MODEL`, default `gemini-2.0-flash`).
 
 ## Repo Structure
 
@@ -49,7 +66,7 @@ voicetale/
 │   │   ├── dependencies.py  # Supabase / ElevenLabs / Vertex AI Gemini client
 │   │   ├── models/          # Pydantic schemas
 │   │   ├── services/        # Pipeline: pdf -> parse -> profile -> dialogue -> audio
-│   │   └── routes/          # /stories, /pages, /sessions, /voices
+│   │   └── routes/          # /stories, /pages, /sessions, /voices, /conversation
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── .env.example
@@ -144,6 +161,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 # App URLs
 BACKEND_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:3000
+
+# ElevenLabs Limits
+ELEVENLABS_MAX_CONCURRENT=3
+ELEVENLABS_MAX_CHARS_PER_REQUEST=2000
+
+# Interactive narrator (ConvAI)
+ELEVENLABS_CONVAI_MODEL=gemini-2.0-flash
+ELEVENLABS_CONVAI_TTS_MODEL=eleven_turbo_v2
 ```
 
 ### Frontend (`frontend/.env.local`)
@@ -178,6 +203,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 | PUT    | `/api/stories/{id}/session`                           | Save resume position                     |
 | GET    | `/api/voices`                                         | Cached ElevenLabs voice library          |
 | POST   | `/api/voices/refresh`                                 | Re-fetch voice library                   |
+| POST   | `/api/stories/{id}/conversation/start`                | Create narrator agent + signed ConvAI URL |
+| POST   | `/api/stories/{id}/conversation/end`                  | Delete ephemeral narrator agent          |
 | GET    | `/api/health`                                         | Health probe                             |
 
 ## Branch Strategy 
