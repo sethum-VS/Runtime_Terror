@@ -116,15 +116,23 @@ export default function StoryPlayerPage() {
             {player.pageLoading || !player.pageData ? (
               <PageLoader />
             ) : (
-              <StoryText
-                words={player.words}
-                activeIndex={player.activeWordIndex}
-                fallbackText={
-                  player.pageData?.raw_segments
-                    ?.map((s) => s.text)
-                    .join(" ") ?? undefined
-                }
-              />
+              <>
+                <StoryText
+                  words={player.words}
+                  activeIndex={player.activeWordIndex}
+                  fallbackText={
+                    player.pageData?.raw_segments
+                      ?.map((s) => s.text)
+                      .join(" ") ?? undefined
+                  }
+                  onWordClick={player.seekToWord}
+                />
+                {player.words.length > 0 && (
+                  <p className="mt-4 font-label-sm text-label-sm text-on-surface-variant text-center">
+                    Click any word to jump to that moment in the audio
+                  </p>
+                )}
+              </>
             )}
           </motion.div>
 
@@ -151,7 +159,10 @@ export default function StoryPlayerPage() {
         </div>
 
         <div className="lg:col-span-4 flex flex-col gap-card-gap">
-          <CharacterPanel characters={player.characters} />
+          <CharacterPanel
+            characters={player.characters}
+            activeCharacterId={player.activeCharacterId}
+          />
           <PageGrid
             currentPage={player.currentPage}
             totalPages={player.story.total_pages}

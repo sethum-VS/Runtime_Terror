@@ -1,70 +1,163 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import type {
   Story,
   Character,
   PageData,
+  DialogueInput,
   Session,
   TimestampChunk,
 } from "@/lib/types";
 
-/**
- * Build word tokens with timing from a list of timestamp chunks.
- * Each character has a start/end time; we group characters into words
- * by splitting on whitespace.
- */
+// ---------------------------------------------------------------------------
+// Word tokens with optional speaker attribution
+// ---------------------------------------------------------------------------
+
 export interface WordToken {
   text: string;
   start: number;
   end: number;
+  characterId?: string;
+  voiceId?: string;
 }
 
+/** Strip ElevenLabs [audio tags] so we can match raw text length to alignment chars. */
+function stripAudioTags(text: string): string {
+  return text.replace(/\[[^\]]*\]/g, "");
+}
+
+/**
+ * Build a voice_id → character_id lookup from the cast list.
+ */
+function buildVoiceToCharacterMap(
+  characters: Character[]
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const c of characters) {
+    if (c.voice_id) map[c.voice_id] = c.character_id;
+  }
+  return map;
+}
+
+/**
+ * Build word tokens with timing *and* speaker attribution.
+ *
+ * Speaker mapping works by aligning the flattened alignment character stream
+ * against the ordered dialogue_json entries. Each dialogue entry's stripped
+ * text length defines a contiguous character range; the voice_id on that entry
+ * tells us who is speaking.
+ */
 export function buildWordsFromTimestamps(
-  timestamps: TimestampChunk[]
+  timestamps: TimestampChunk[],
+  dialogueJson?: DialogueInput[] | null,
+  voiceToCharacter?: Record<string, string>
 ): WordToken[] {
+  // 1. Build per-character flat arrays
+  const allChars: string[] = [];
+  const allStarts: number[] = [];
+  const allEnds: number[] = [];
+
+  for (const chunk of timestamps) {
+    const chars = chunk.characters || [];
+    const starts = chunk.character_start_times || [];
+    const ends = chunk.character_end_times || [];
+    for (let i = 0; i < chars.length; i++) {
+      allChars.push(chars[i]);
+      allStarts.push(starts[i] ?? 0);
+      allEnds.push(ends[i] ?? (starts[i] ?? 0));
+    }
+  }
+
+  // 2. Build segment boundaries (cumulative char offsets) from dialogue_json
+  type SegRange = { start: number; end: number; voiceId: string };
+  const segRanges: SegRange[] = [];
+
+  if (dialogueJson?.length) {
+    let offset = 0;
+    for (const seg of dialogueJson) {
+      const stripped = stripAudioTags(seg.text);
+      const len = stripped.length;
+      segRanges.push({
+        start: offset,
+        end: offset + len,
+        voiceId: seg.voice_id,
+      });
+      offset += len;
+    }
+
+    // Scale ranges if alignment char count differs from dialogue text length
+    // (ElevenLabs may normalize text slightly differently).
+    const totalSegChars = offset;
+    const totalAlignChars = allChars.length;
+    if (totalSegChars > 0 && totalAlignChars > 0 && totalSegChars !== totalAlignChars) {
+      const scale = totalAlignChars / totalSegChars;
+      let running = 0;
+      for (const r of segRanges) {
+        const scaledLen = Math.round((r.end - r.start) * scale);
+        r.start = running;
+        r.end = running + scaledLen;
+        running += scaledLen;
+      }
+      if (segRanges.length) {
+        segRanges[segRanges.length - 1].end = totalAlignChars;
+      }
+    }
+  }
+
+  function speakerAtCharIndex(idx: number): { voiceId?: string; characterId?: string } {
+    if (!segRanges.length || !voiceToCharacter) return {};
+    for (const r of segRanges) {
+      if (idx >= r.start && idx < r.end) {
+        return {
+          voiceId: r.voiceId,
+          characterId: voiceToCharacter[r.voiceId],
+        };
+      }
+    }
+    return {};
+  }
+
+  // 3. Group characters into words (same logic as before, plus speaker)
   const words: WordToken[] = [];
   let currentChars: string[] = [];
   let currentStart: number | null = null;
   let currentEnd: number | null = null;
+  let wordFirstCharIdx = 0;
 
   const flush = () => {
     if (currentChars.length === 0) return;
     const text = currentChars.join("");
     if (text.trim()) {
+      const speaker = speakerAtCharIndex(wordFirstCharIdx);
       words.push({
         text,
         start: currentStart ?? 0,
         end: currentEnd ?? (currentStart ?? 0),
+        characterId: speaker.characterId,
+        voiceId: speaker.voiceId,
       });
-    } else if (words.length) {
-      // Append whitespace to previous word's text? Actually we keep it as a
-      // separator and skip. Returning text without trailing space is fine
-      // because we'll render with a `space` between word tokens.
     }
     currentChars = [];
     currentStart = null;
     currentEnd = null;
   };
 
-  for (const chunk of timestamps) {
-    const chars = chunk.characters || [];
-    const starts = chunk.character_start_times || [];
-    const ends = chunk.character_end_times || [];
+  for (let i = 0; i < allChars.length; i++) {
+    const ch = allChars[i];
+    const s = allStarts[i];
+    const e = allEnds[i];
 
-    for (let i = 0; i < chars.length; i++) {
-      const ch = chars[i];
-      const s = starts[i] ?? 0;
-      const e = ends[i] ?? s;
-
-      if (ch === " " || ch === "\n" || ch === "\t") {
-        flush();
-      } else {
-        if (currentStart === null) currentStart = s;
-        currentEnd = e;
-        currentChars.push(ch);
+    if (ch === " " || ch === "\n" || ch === "\t") {
+      flush();
+    } else {
+      if (currentStart === null) {
+        currentStart = s;
+        wordFirstCharIdx = i;
       }
+      currentEnd = e;
+      currentChars.push(ch);
     }
   }
   flush();
@@ -121,9 +214,25 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const [audioReady, setAudioReady] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
 
-  const words: WordToken[] = pageData?.timestamps_json
-    ? buildWordsFromTimestamps(pageData.timestamps_json)
-    : [];
+  const voiceToCharacter = useMemo(
+    () => buildVoiceToCharacterMap(characters),
+    [characters]
+  );
+
+  const words: WordToken[] = useMemo(
+    () =>
+      pageData?.timestamps_json
+        ? buildWordsFromTimestamps(
+            pageData.timestamps_json,
+            pageData.dialogue_json,
+            voiceToCharacter
+          )
+        : [],
+    [pageData?.timestamps_json, pageData?.dialogue_json, voiceToCharacter]
+  );
+
+  const activeCharacterId =
+    activeWordIndex >= 0 ? words[activeWordIndex]?.characterId ?? null : null;
 
   // ----- Bootstrapping: load story, characters, session -----
   useEffect(() => {
@@ -471,6 +580,21 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const handlePlay = useCallback(() => setIsPlaying(true), []);
   const handlePause = useCallback(() => setIsPlaying(false), []);
 
+  const seekToWord = useCallback(
+    (index: number) => {
+      const w = words[index];
+      if (!w || !pageData?.audio_url) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+      const t = Math.max(0, Math.min(audio.duration || 0, w.start));
+      audio.currentTime = t;
+      setCurrentTime(t);
+      setActiveWordIndex(index);
+      if (audio.paused) void startPlayback();
+    },
+    [words, pageData?.audio_url, startPlayback]
+  );
+
   const seekTo = useCallback(
     (seconds: number) => {
       const audio = audioRef.current;
@@ -549,6 +673,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     currentTime,
     duration,
     activeWordIndex,
+    activeCharacterId,
     nextPageStatus,
     error,
     pageLoading,
@@ -561,6 +686,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     handlePause,
     togglePlay,
     seekTo,
+    seekToWord,
     goToPage,
   };
 }
