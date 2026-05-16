@@ -26,7 +26,7 @@ async def upload_story(file: UploadFile = File(...)):
     try:
         md_text = await convert_pdf_to_markdown(file_bytes, file.filename)
     except Exception as e:
-        raise HTTPException(500, f"PDF conversion failed: {str(e)}")
+        raise HTTPException(500, f"PDF conversion failed: {str(e)}") from e
 
     if not md_text.strip():
         raise HTTPException(400, "PDF contains no extractable text")
@@ -37,18 +37,23 @@ async def upload_story(file: UploadFile = File(...)):
         "original_text": md_text,
         "status": "uploaded",
     }
-    result = supabase.table("stories").insert(story_data).execute()
+    try:
+        result = supabase.table("stories").insert(story_data).execute()
+    except Exception as e:
+        raise HTTPException(500, f"Database error: {str(e)}") from e
+
     if not result.data:
         raise HTTPException(500, "Failed to create story record")
 
     story = result.data[0]
-    asyncio.create_task(_run_parsing_pipeline(story["id"], md_text))
+    story_id = str(story["id"])
+    asyncio.create_task(_run_parsing_pipeline(story_id, md_text))
 
     return StoryResponse(
-        id=story["id"],
+        id=story_id,
         title=story["title"],
         status=story["status"],
-        total_pages=0,
+        total_pages=story.get("total_pages") or 0,
     )
 
 
