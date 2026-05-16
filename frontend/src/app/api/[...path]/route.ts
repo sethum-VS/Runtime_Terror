@@ -8,6 +8,29 @@ async function proxyRequest(req: NextRequest, path: string[]) {
   const targetPath = path.join("/");
   const search = req.nextUrl.search;
   const url = `${BACKEND_URL}/api/${targetPath}${search}`;
+  // #region agent log
+  fetch("http://127.0.0.1:7526/ingest/961202cd-c5d8-4866-bb97-7c7fd4c9f5f8", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "0b705f",
+    },
+    body: JSON.stringify({
+      sessionId: "0b705f",
+      runId: "initial",
+      hypothesisId: "H3",
+      location: "frontend/src/app/api/[...path]/route.ts:proxyRequest:entry",
+      message: "Next API proxy invoked",
+      data: {
+        method: req.method,
+        targetPath,
+        backendBaseUrl: BACKEND_URL,
+        targetUrl: url,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   const headers = new Headers();
   const contentType = req.headers.get("content-type");
@@ -27,6 +50,24 @@ async function proxyRequest(req: NextRequest, path: string[]) {
 
   const res = await fetch(url, init);
   const body = await res.arrayBuffer();
+  // #region agent log
+  fetch("http://127.0.0.1:7526/ingest/961202cd-c5d8-4866-bb97-7c7fd4c9f5f8", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "0b705f",
+    },
+    body: JSON.stringify({
+      sessionId: "0b705f",
+      runId: "initial",
+      hypothesisId: "H3",
+      location: "frontend/src/app/api/[...path]/route.ts:proxyRequest:response",
+      message: "Next API proxy got backend response",
+      data: { targetPath, status: res.status, statusText: res.statusText },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   return new NextResponse(body, {
     status: res.status,

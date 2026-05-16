@@ -7,10 +7,29 @@ import type {
   Voice,
 } from "./types";
 
-// Empty string = same-origin requests via Next.js rewrite (avoids CORS in local dev).
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+// All requests use relative paths; Next.js rewrites (next.config.mjs) proxy
+// /api/* to the backend (NEXT_PUBLIC_BACKEND_URL) to avoid browser CORS.
+const API_URL = "";
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // #region agent log
+  fetch("http://127.0.0.1:7526/ingest/961202cd-c5d8-4866-bb97-7c7fd4c9f5f8", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "0b705f",
+    },
+    body: JSON.stringify({
+      sessionId: "0b705f",
+      runId: "initial",
+      hypothesisId: "H1",
+      location: "frontend/src/lib/api.ts:jsonFetch:beforeFetch",
+      message: "Client fetch started",
+      data: { path, hasAbsoluteApiBase: Boolean(API_URL), method: init?.method || "GET" },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -22,6 +41,24 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
+    // #region agent log
+    fetch("http://127.0.0.1:7526/ingest/961202cd-c5d8-4866-bb97-7c7fd4c9f5f8", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "0b705f",
+      },
+      body: JSON.stringify({
+        sessionId: "0b705f",
+        runId: "initial",
+        hypothesisId: "H2",
+        location: "frontend/src/lib/api.ts:jsonFetch:nonOk",
+        message: "Client fetch received non-ok response",
+        data: { path, status: res.status, statusText: res.statusText },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     let detail = "";
     try {
       const data = await res.json();
@@ -31,6 +68,24 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(`${res.status}: ${detail}`);
   }
+  // #region agent log
+  fetch("http://127.0.0.1:7526/ingest/961202cd-c5d8-4866-bb97-7c7fd4c9f5f8", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "0b705f",
+    },
+    body: JSON.stringify({
+      sessionId: "0b705f",
+      runId: "initial",
+      hypothesisId: "H2",
+      location: "frontend/src/lib/api.ts:jsonFetch:ok",
+      message: "Client fetch succeeded",
+      data: { path, status: res.status },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   return res.json() as Promise<T>;
 }
 
