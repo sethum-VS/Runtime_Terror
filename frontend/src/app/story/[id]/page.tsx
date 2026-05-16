@@ -8,6 +8,8 @@ import { StoryText } from "@/components/player/StoryText";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { CharacterPanel } from "@/components/player/CharacterPanel";
 import { VoiceAgent } from "@/components/player/VoiceAgent";
+import { SoundMixerPanel } from "@/components/player/SoundMixerPanel";
+import { useAmbientMixer } from "@/hooks/useAmbientMixer";
 import { useAuth } from "@/context/AuthContext";
 import { useReadingLibrary } from "@/context/ReadingLibraryContext";
 import { useEffect, useState, useCallback } from "react";
@@ -20,6 +22,13 @@ export default function StoryPlayerPage() {
   const [togglingBookmark, setTogglingBookmark] = useState(false);
 
   const player = useStoryPlayer({ storyId: storyId || "" });
+  const ambient = useAmbientMixer(
+    storyId || "",
+    player.currentPage,
+    player.isPlaying,
+    player.currentTime,
+    player.duration
+  );
 
   useEffect(() => {
     if (player.story && storyId) {
@@ -77,10 +86,12 @@ export default function StoryPlayerPage() {
     nextPageStatus: player.nextPageStatus,
     canPlay: player.canPlay,
     pageLoading: player.pageLoading,
+    isAmbientEnabled: ambient.isEnabled,
     onTogglePlay: player.togglePlay,
     onSeek: player.seekTo,
     onPrev: () => player.goToPage(player.currentPage - 1),
     onNext: () => player.goToPage(player.currentPage + 1),
+    onToggleAmbient: ambient.toggleEnabled,
   };
 
   return (
@@ -90,8 +101,14 @@ export default function StoryPlayerPage() {
           ref={player.bindAudioElement}
           onTimeUpdate={player.handleTimeUpdate}
           onEnded={player.handleEnded}
-          onPlay={player.handlePlay}
-          onPause={player.handlePause}
+          onPlay={() => {
+            player.handlePlay();
+            ambient.syncStoryPlayback(true);
+          }}
+          onPause={() => {
+            ambient.syncStoryPlayback(false);
+            player.handlePause();
+          }}
           preload="auto"
           playsInline
         />
@@ -177,6 +194,13 @@ export default function StoryPlayerPage() {
               characters={player.characters}
               activeCharacterId={player.activeCharacterId}
             />
+            <SoundMixerPanel
+              volume={ambient.volume}
+              isEnabled={ambient.isEnabled}
+              isLoading={ambient.isLoading}
+              trackLabel={ambient.trackLabel}
+              onSetVolume={ambient.setVolume}
+            />
             <NarratorPanel
               storyId={storyId}
               currentPage={player.currentPage}
@@ -192,6 +216,13 @@ export default function StoryPlayerPage() {
         </div>
 
         <div className="lg:hidden mt-card-gap flex flex-col gap-card-gap">
+          <SoundMixerPanel
+            volume={ambient.volume}
+            isEnabled={ambient.isEnabled}
+            isLoading={ambient.isLoading}
+            trackLabel={ambient.trackLabel}
+            onSetVolume={ambient.setVolume}
+          />
           <NarratorPanel
             storyId={storyId}
             currentPage={player.currentPage}

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Low-latency TTS for English ConvAI agents (language=en requires v2, not v2.5)
     elevenlabs_convai_tts_model: str = "eleven_turbo_v2"
 
+    ambient_loop_duration: float = 20.0  # longer loop suits musical pads/drones
+    ambient_prompt_influence: float = 0.72  # ElevenLabs SFX adherence (higher = closer to prompt)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

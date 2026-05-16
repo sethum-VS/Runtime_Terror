@@ -1,8 +1,10 @@
 import asyncio
-from typing import Optional
+import time
+from typing import Callable, Optional, TypeVar
 
 import httpx
 from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
 from elevenlabs.client import ElevenLabs
 import vertexai
 from vertexai.generative_models import GenerativeModel
@@ -20,6 +22,11 @@ _elevenlabs_client: Optional[ElevenLabs] = None
 _gemini_flash: Optional[GenerativeModel] = None
 _gemini_model_name: Optional[str] = None
 
+_role_cache: dict[str, tuple[str, float]] = {}
+ROLE_CACHE_TTL_SEC = 300
+
+T = TypeVar("T")
+
 
 def get_supabase() -> Client:
     global _supabase
@@ -31,8 +38,17 @@ def get_supabase() -> Client:
         _supabase = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key,
+            options=ClientOptions(
+                postgrest_client_timeout=httpx.Timeout(60.0, connect=15.0),
+                storage_client_timeout=httpx.Timeout(60.0, connect=15.0),
+            ),
         )
     return _supabase
+
+
+async def run_supabase(fn: Callable[[], T]) -> T:
+    """Run blocking Supabase SDK calls off the event loop."""
+    return await asyncio.to_thread(fn)
 
 
 def get_elevenlabs() -> ElevenLabs:
@@ -88,7 +104,7 @@ async def _verify_token_via_supabase_auth(token: str) -> str | None:
     if not api_key:
         return None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
                 f"{cfg.supabase_url.rstrip('/')}/auth/v1/user",
                 headers={
@@ -123,9 +139,26 @@ def _verify_token_via_jwt_secret(token: str) -> str | None:
 
 
 async def _resolve_user_role(user_id: str) -> str:
-    sb = get_supabase()
-    profile = sb.table("user_profiles").select("role").eq("user_id", user_id).execute()
-    return profile.data[0]["role"] if profile.data else "user"
+    now = time.monotonic()
+    cached = _role_cache.get(user_id)
+    if cached and (now - cached[1]) < ROLE_CACHE_TTL_SEC:
+        return cached[0]
+
+    def _fetch() -> str:
+        sb = get_supabase()
+        profile = sb.table("user_profiles").select("role").eq("user_id", user_id).execute()
+        return profile.data[0]["role"] if profile.data else "user"
+
+    try:
+        role = await run_supabase(_fetch)
+    except Exception as exc:
+        print(f"[auth] role lookup failed for {user_id}: {exc}")
+        if cached:
+            return cached[0]
+        return "user"
+
+    _role_cache[user_id] = (role, now)
+    return role
 
 
 async def get_current_user(authorization: str | None = Header(None)) -> dict | None:
@@ -136,9 +169,10 @@ async def get_current_user(authorization: str | None = Header(None)) -> dict | N
     if not token:
         return None
 
-    user_id = await _verify_token_via_supabase_auth(token)
+    # Prefer local JWT verify when configured (no network round-trip per request).
+    user_id = _verify_token_via_jwt_secret(token)
     if not user_id:
-        user_id = _verify_token_via_jwt_secret(token)
+        user_id = await _verify_token_via_supabase_auth(token)
     if not user_id:
         return None
 

@@ -101,3 +101,17 @@ export interface ConversationStartResponse {
   signed_url: string;
   agent_id: string;
 }
+
+export interface AmbientTrack {
+  layer_index: number;
+  label: string;
+  audio_url: string | null;
+  default_volume: number;
+  start_fraction: number;
+  status: string;
+}
+
+export interface AmbientTracksResponse {
+  page_number: number;
+  tracks: AmbientTrack[];
+}

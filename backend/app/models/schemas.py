@@ -112,6 +112,20 @@ class ConversationEndRequest(BaseModel):
     agent_id: str
 
 
+class AmbientTrackResponse(BaseModel):
+    layer_index: int
+    label: str
+    audio_url: Optional[str] = None
+    default_volume: float = 0.3
+    start_fraction: float = 0.0
+    status: str = "idle"
+
+
+class AmbientTracksResponse(BaseModel):
+    page_number: int
+    tracks: List[AmbientTrackResponse] = []
+
+
 class HealthResponse(BaseModel):
     status: str
     service: str
