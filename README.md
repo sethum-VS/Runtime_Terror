@@ -180,7 +180,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 | POST   | `/api/voices/refresh`                                 | Re-fetch voice library                   |
 | GET    | `/api/health`                                         | Health probe                             |
 
-## Branch Strategy
+## Branch Strategy Test
 
 - `prod` — Production-ready code (deployed)
 - `dev` — Active development branch (default working branch)
