@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     google_cloud_project: str = ""
     google_cloud_region: str = "us-central1"
+    gemini_model: str = "gemini-2.5-flash"  # Vertex AI model ID
 
     supabase_url: str = ""
     supabase_anon_key: str = ""

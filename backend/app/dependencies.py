@@ -10,9 +10,12 @@ from app.config import get_settings
 
 settings = get_settings()
 
+VERTEX_GEMINI_MODEL = "gemini-2.5-flash"
+
 _supabase: Optional[Client] = None
 _elevenlabs_client: Optional[ElevenLabs] = None
 _gemini_flash: Optional[GenerativeModel] = None
+_gemini_model_name: Optional[str] = None
 
 
 def get_supabase() -> Client:
@@ -38,20 +41,33 @@ def get_elevenlabs() -> ElevenLabs:
     return _elevenlabs_client
 
 
+def _resolve_gemini_model() -> str:
+    """Always use Gemini 2.5 Flash on Vertex AI (2.0 is deprecated/unavailable)."""
+    cfg = get_settings()
+    model = (cfg.gemini_model or VERTEX_GEMINI_MODEL).strip()
+    if "gemini-2.0" in model or model == "gemini-2.0-flash":
+        model = VERTEX_GEMINI_MODEL
+    return model
+
+
 def get_gemini() -> GenerativeModel:
-    global _gemini_flash
-    if _gemini_flash is None:
-        if not settings.google_cloud_project:
+    global _gemini_flash, _gemini_model_name
+    model_name = _resolve_gemini_model()
+    if _gemini_flash is None or _gemini_model_name != model_name:
+        cfg = get_settings()
+        if not cfg.google_cloud_project:
             raise RuntimeError(
                 "GOOGLE_CLOUD_PROJECT missing in .env. "
                 "Set it to your GCP project ID and ensure GOOGLE_APPLICATION_CREDENTIALS "
                 "points to your service account key file (for local dev)."
             )
         vertexai.init(
-            project=settings.google_cloud_project,
-            location=settings.google_cloud_region,
+            project=cfg.google_cloud_project,
+            location=cfg.google_cloud_region,
         )
-        _gemini_flash = GenerativeModel("gemini-2.0-flash")
+        print(f"[vertexai] Using model: {model_name}")
+        _gemini_flash = GenerativeModel(model_name)
+        _gemini_model_name = model_name
     return _gemini_flash
 
 

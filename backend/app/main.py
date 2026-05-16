@@ -18,7 +18,10 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # Startup: cache voice library (best-effort, non-blocking on failure)
     try:
+        from app.dependencies import _resolve_gemini_model
         from app.services.voice_service import cache_voice_library
+
+        print(f"[startup] Vertex AI model: {_resolve_gemini_model()}")
         await cache_voice_library()
         print("[startup] Voice library cached successfully")
     except Exception as e:

@@ -26,7 +26,7 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 |--------------|--------------------------------------------------------------|
 | Frontend     | Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion |
 | Backend      | Python FastAPI (async)                                       |
-| LLMs         | Gemini 2.0 Flash via **Vertex AI** (service account / ADC)   |
+| LLMs         | Gemini 2.5 Flash via **Vertex AI** (service account / ADC)   |
 | Voice / TTS  | ElevenLabs — Text-to-Dialogue, Voice Design, Voice Library, Audio Tags |
 | Database     | Supabase (PostgreSQL + Storage)                              |
 | Deployment   | Vercel (frontend) + GCP Cloud Run (backend)                  |
@@ -132,6 +132,7 @@ ELEVENLABS_API_KEY=
 # Google Cloud / Vertex AI
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GOOGLE_CLOUD_REGION=us-central1
+GEMINI_MODEL=gemini-2.5-flash
 # Local dev only (optional if using gcloud auth application-default login):
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
 
