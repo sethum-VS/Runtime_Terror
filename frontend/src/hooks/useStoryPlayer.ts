@@ -1,0 +1,383 @@
+"use client";
+
+import { useEffect, useState, useRef, useCallback } from "react";
+import { api } from "@/lib/api";
+import type {
+  Story,
+  Character,
+  PageData,
+  Session,
+  TimestampChunk,
+} from "@/lib/types";
+
+/**
+ * Build word tokens with timing from a list of timestamp chunks.
+ * Each character has a start/end time; we group characters into words
+ * by splitting on whitespace.
+ */
+export interface WordToken {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export function buildWordsFromTimestamps(
+  timestamps: TimestampChunk[]
+): WordToken[] {
+  const words: WordToken[] = [];
+  let currentChars: string[] = [];
+  let currentStart: number | null = null;
+  let currentEnd: number | null = null;
+
+  const flush = () => {
+    if (currentChars.length === 0) return;
+    const text = currentChars.join("");
+    if (text.trim()) {
+      words.push({
+        text,
+        start: currentStart ?? 0,
+        end: currentEnd ?? (currentStart ?? 0),
+      });
+    } else if (words.length) {
+      // Append whitespace to previous word's text? Actually we keep it as a
+      // separator and skip. Returning text without trailing space is fine
+      // because we'll render with a `space` between word tokens.
+    }
+    currentChars = [];
+    currentStart = null;
+    currentEnd = null;
+  };
+
+  for (const chunk of timestamps) {
+    const chars = chunk.characters || [];
+    const starts = chunk.character_start_times || [];
+    const ends = chunk.character_end_times || [];
+
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i];
+      const s = starts[i] ?? 0;
+      const e = ends[i] ?? s;
+
+      if (ch === " " || ch === "\n" || ch === "\t") {
+        flush();
+      } else {
+        if (currentStart === null) currentStart = s;
+        currentEnd = e;
+        currentChars.push(ch);
+      }
+    }
+  }
+  flush();
+  return words;
+}
+
+interface UseStoryPlayerArgs {
+  storyId: string;
+}
+
+export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const nextPageRequestedRef = useRef(false);
+  const lastSavedPositionRef = useRef(0);
+  const lastSaveAtRef = useRef(0);
+
+  const [story, setStory] = useState<Story | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [pageData, setPageData] = useState<PageData | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [nextPageStatus, setNextPageStatus] = useState<
+    "idle" | "generating" | "ready"
+  >("idle");
+  const [activeWordIndex, setActiveWordIndex] = useState(-1);
+  const [error, setError] = useState<string | null>(null);
+  const [pageLoading, setPageLoading] = useState(false);
+
+  const words: WordToken[] = pageData?.timestamps_json
+    ? buildWordsFromTimestamps(pageData.timestamps_json)
+    : [];
+
+  // ----- Bootstrapping: load story, characters, session -----
+  useEffect(() => {
+    if (!storyId) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [s, chars, session] = await Promise.all([
+          api.getStory(storyId),
+          api.getCharacters(storyId),
+          api
+            .getSession(storyId)
+            .catch(() =>
+              ({ story_id: storyId, last_page: 1, last_position: 0 }) as Session
+            ),
+        ]);
+        if (cancelled) return;
+        setStory(s);
+        setCharacters(chars);
+        const startPage = Math.max(1, session.last_page || 1);
+        setCurrentPage(startPage);
+        lastSavedPositionRef.current = session.last_position || 0;
+      } catch (e) {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Failed to load story");
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [storyId]);
+
+  // ----- Load (or generate) the current page on change -----
+  useEffect(() => {
+    if (!storyId || !currentPage) return;
+    let cancelled = false;
+    let pollHandle: ReturnType<typeof setInterval> | null = null;
+
+    const ensurePage = async () => {
+      setPageLoading(true);
+      setActiveWordIndex(-1);
+      setPageData(null);
+      try {
+        const p = await api.getPage(storyId, currentPage);
+        if (cancelled) return;
+
+        if (p.status === "ready") {
+          setPageData(p);
+          setPageLoading(false);
+          nextPageRequestedRef.current = false;
+          setNextPageStatus("idle");
+          return;
+        }
+
+        if (p.status === "idle" || p.status === "failed") {
+          await api.generatePage(storyId, currentPage);
+        }
+
+        // Poll until ready
+        pollHandle = setInterval(async () => {
+          if (cancelled) return;
+          try {
+            const fresh = await api.getPage(storyId, currentPage);
+            if (fresh.status === "ready") {
+              setPageData(fresh);
+              setPageLoading(false);
+              nextPageRequestedRef.current = false;
+              setNextPageStatus("idle");
+              if (pollHandle) clearInterval(pollHandle);
+            } else if (fresh.status === "failed") {
+              setError("Audio generation failed for this page.");
+              setPageLoading(false);
+              if (pollHandle) clearInterval(pollHandle);
+            }
+          } catch {
+            /* keep polling */
+          }
+        }, 2000);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load page");
+        setPageLoading(false);
+      }
+    };
+    ensurePage();
+
+    return () => {
+      cancelled = true;
+      if (pollHandle) clearInterval(pollHandle);
+    };
+  }, [storyId, currentPage]);
+
+  // ----- When new page audio loads, optionally resume from saved position -----
+  useEffect(() => {
+    if (!pageData?.audio_url || !audioRef.current) return;
+    const audio = audioRef.current;
+    audio.src = pageData.audio_url;
+    audio.load();
+
+    const onMeta = () => {
+      setDuration(audio.duration || 0);
+      const resume = lastSavedPositionRef.current;
+      if (resume > 0 && resume < (audio.duration || 0)) {
+        audio.currentTime = resume;
+      }
+      lastSavedPositionRef.current = 0;
+      if (isPlaying) {
+        audio.play().catch(() => {
+          /* autoplay blocked */
+        });
+      }
+    };
+    audio.addEventListener("loadedmetadata", onMeta);
+    return () => audio.removeEventListener("loadedmetadata", onMeta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageData?.audio_url]);
+
+  // ----- Audio time updates: word highlight + lazy next page trigger -----
+  const handleTimeUpdate = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const t = audio.currentTime;
+    setCurrentTime(t);
+
+    // Find active word
+    if (words.length) {
+      // Most updates advance forward, so do a small linear search from prev
+      const prev = activeWordIndex >= 0 ? activeWordIndex : 0;
+      let found = -1;
+      for (let i = prev; i < words.length; i++) {
+        if (t >= words[i].start && t <= words[i].end) {
+          found = i;
+          break;
+        }
+        if (words[i].start > t) {
+          found = Math.max(0, i - 1);
+          break;
+        }
+      }
+      if (found === -1 && t >= (words[words.length - 1]?.end || 0)) {
+        found = words.length - 1;
+      }
+      if (found !== -1 && found !== activeWordIndex) {
+        setActiveWordIndex(found);
+      }
+    }
+
+    // Lazy next-page trigger: <= 30 s remaining and we have a next page
+    const remaining = (audio.duration || 0) - t;
+    if (
+      remaining > 0 &&
+      remaining <= 30 &&
+      !nextPageRequestedRef.current &&
+      story &&
+      currentPage < story.total_pages
+    ) {
+      nextPageRequestedRef.current = true;
+      setNextPageStatus("generating");
+      api
+        .generatePage(storyId, currentPage + 1)
+        .catch(() => {
+          /* background */
+        })
+        .finally(() => {
+          const poll = setInterval(async () => {
+            try {
+              const p = await api.getPage(storyId, currentPage + 1);
+              if (p.status === "ready") {
+                setNextPageStatus("ready");
+                if (p.audio_url) {
+                  const preload = new Audio(p.audio_url);
+                  preload.preload = "auto";
+                }
+                clearInterval(poll);
+              } else if (p.status === "failed") {
+                clearInterval(poll);
+              }
+            } catch {
+              /* keep polling */
+            }
+          }, 2000);
+        });
+    }
+
+    // Throttled session save (max once per 5 seconds)
+    const now = Date.now();
+    if (now - lastSaveAtRef.current > 5000 && t > 0) {
+      lastSaveAtRef.current = now;
+      api.saveSession(storyId, currentPage, t).catch(() => {});
+    }
+  }, [words, activeWordIndex, story, currentPage, storyId]);
+
+  // ----- Audio ended: auto-advance -----
+  const handleEnded = useCallback(() => {
+    if (story && currentPage < story.total_pages) {
+      setCurrentPage((p) => p + 1);
+      setIsPlaying(true);
+    } else {
+      setIsPlaying(false);
+    }
+  }, [story, currentPage]);
+
+  const togglePlay = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    } else {
+      audio.pause();
+      setIsPlaying(false);
+      api.saveSession(storyId, currentPage, audio.currentTime).catch(() => {});
+    }
+  }, [storyId, currentPage]);
+
+  const seekTo = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration || 0, seconds));
+  }, []);
+
+  const goToPage = useCallback(
+    (n: number) => {
+      if (!story) return;
+      const target = Math.max(1, Math.min(story.total_pages, n));
+      if (target === currentPage) return;
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+      }
+      lastSavedPositionRef.current = 0;
+      setCurrentPage(target);
+    },
+    [story, currentPage]
+  );
+
+  // Save session on unload
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const audio = audioRef.current;
+      if (audio) {
+        navigator.sendBeacon?.(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/stories/${storyId}/session`,
+          new Blob(
+            [
+              JSON.stringify({
+                last_page: currentPage,
+                last_position: audio.currentTime,
+              }),
+            ],
+            { type: "application/json" }
+          )
+        );
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [storyId, currentPage]);
+
+  return {
+    audioRef,
+    story,
+    characters,
+    pageData,
+    currentPage,
+    isPlaying,
+    currentTime,
+    duration,
+    activeWordIndex,
+    nextPageStatus,
+    error,
+    pageLoading,
+    words,
+    handleTimeUpdate,
+    handleEnded,
+    togglePlay,
+    seekTo,
+    goToPage,
+  };
+}

@@ -1,0 +1,28 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-dotenv==1.0.1
+pydantic-settings==2.5.0
+python-multipart==0.0.9
+
+# AI / LLM (Vertex AI SDK - authenticates via service account / ADC)
+google-cloud-aiplatform==1.72.0
+
+# ElevenLabs
+elevenlabs==1.50.0
+
+# PDF Processing
+pymupdf4llm>=0.0.17
+pymupdf>=1.24.10
+
+# Database
+supabase==2.9.0
+
+# HTTP & Async
+httpx==0.27.0
+aiofiles==24.1.0
+
+# Retry logic
+tenacity==9.0.0
+
+# Audio processing
+pydub==0.25.1
