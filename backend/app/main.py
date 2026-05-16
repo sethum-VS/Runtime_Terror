@@ -54,7 +54,7 @@ app.add_middleware(
 )
 
 # Routes
-from app.routes import stories, pages, voices, sessions, profiles, bookmarks  # noqa: E402
+from app.routes import stories, pages, voices, sessions, profiles, bookmarks, conversation  # noqa: E402
 
 app.include_router(stories.router, prefix="/api", tags=["Stories"])
 app.include_router(pages.router, prefix="/api", tags=["Pages"])
@@ -62,6 +62,7 @@ app.include_router(voices.router, prefix="/api", tags=["Voices"])
 app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
 app.include_router(profiles.router, prefix="/api", tags=["Profile"])
 app.include_router(bookmarks.router, prefix="/api", tags=["Bookmarks"])
+app.include_router(conversation.router, prefix="/api", tags=["Conversation"])
 
 
 @app.exception_handler(Exception)

@@ -7,9 +7,10 @@ import { useStoryPlayer } from "@/hooks/useStoryPlayer";
 import { StoryText } from "@/components/player/StoryText";
 import { PlayerControls } from "@/components/player/PlayerControls";
 import { CharacterPanel } from "@/components/player/CharacterPanel";
+import { VoiceAgent } from "@/components/player/VoiceAgent";
 import { useAuth } from "@/context/AuthContext";
 import { useReadingLibrary } from "@/context/ReadingLibraryContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export default function StoryPlayerPage() {
   const params = useParams<{ id: string }>();
@@ -31,6 +32,14 @@ export default function StoryPlayerPage() {
       });
     }
   }, [player.currentPage, player.story, storyId, recordRecent]);
+
+  const handlePauseForAgent = useCallback(() => {
+    player.pauseAudio();
+  }, [player.pauseAudio]);
+
+  const handleResumeAfterAgent = useCallback(() => {
+    // Don't auto-resume — let the user press play
+  }, []);
 
   async function handleToggleBookmark() {
     if (!storyId) return;
@@ -168,6 +177,12 @@ export default function StoryPlayerPage() {
               characters={player.characters}
               activeCharacterId={player.activeCharacterId}
             />
+            <NarratorPanel
+              storyId={storyId}
+              currentPage={player.currentPage}
+              onPauseStoryAudio={handlePauseForAgent}
+              onResumeStoryAudio={handleResumeAfterAgent}
+            />
             <PageGrid
               currentPage={player.currentPage}
               totalPages={player.story.total_pages}
@@ -176,7 +191,13 @@ export default function StoryPlayerPage() {
           </div>
         </div>
 
-        <div className="lg:hidden mt-card-gap">
+        <div className="lg:hidden mt-card-gap flex flex-col gap-card-gap">
+          <NarratorPanel
+            storyId={storyId}
+            currentPage={player.currentPage}
+            onPauseStoryAudio={handlePauseForAgent}
+            onResumeStoryAudio={handleResumeAfterAgent}
+          />
           <PageGrid
             currentPage={player.currentPage}
             totalPages={player.story.total_pages}
@@ -206,6 +227,37 @@ function PageLoader() {
         </span>
         Generating page audio…
       </p>
+    </div>
+  );
+}
+
+function NarratorPanel({
+  storyId,
+  currentPage,
+  onPauseStoryAudio,
+  onResumeStoryAudio,
+}: {
+  storyId: string;
+  currentPage: number;
+  onPauseStoryAudio: () => void;
+  onResumeStoryAudio: () => void;
+}) {
+  return (
+    <div className="glass-panel bg-surface/60 rounded-xl p-6">
+      <p className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-4">
+        Talk to Narrator
+      </p>
+      <div className="flex flex-col items-center gap-3">
+        <VoiceAgent
+          storyId={storyId}
+          currentPage={currentPage}
+          onPauseStoryAudio={onPauseStoryAudio}
+          onResumeStoryAudio={onResumeStoryAudio}
+        />
+        <p className="font-label-sm text-label-sm text-on-surface-variant text-center">
+          Tap the mic to speak. Tap the orb to end the session.
+        </p>
+      </div>
     </div>
   );
 }

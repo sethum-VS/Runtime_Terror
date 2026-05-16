@@ -98,6 +98,20 @@ class BookmarkResponse(BaseModel):
     created_at: Optional[str] = None
 
 
+class ConversationStartRequest(BaseModel):
+    current_page: int = 1
+    is_first_session: bool = True
+
+
+class ConversationStartResponse(BaseModel):
+    signed_url: str
+    agent_id: str
+
+
+class ConversationEndRequest(BaseModel):
+    agent_id: str
+
+
 class HealthResponse(BaseModel):
     status: str
     service: str

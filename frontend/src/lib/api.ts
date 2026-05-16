@@ -7,6 +7,7 @@ import type {
   Voice,
   UserProfile,
   BookmarkEntry,
+  ConversationStartResponse,
 } from "./types";
 
 // Relative /api/* calls are handled by `src/app/api/[...path]/route.ts`, which
@@ -141,6 +142,33 @@ export const api = {
 
   async checkBookmark(storyId: string) {
     return jsonFetch<{ bookmarked: boolean }>(`/api/bookmarks/${storyId}`);
+  },
+
+  async startConversation(
+    storyId: string,
+    currentPage: number,
+    isFirstSession: boolean = true,
+  ): Promise<ConversationStartResponse> {
+    return jsonFetch<ConversationStartResponse>(
+      `/api/stories/${storyId}/conversation/start`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          current_page: currentPage,
+          is_first_session: isFirstSession,
+        }),
+      }
+    );
+  },
+
+  async endConversation(
+    storyId: string,
+    agentId: string
+  ): Promise<void> {
+    await jsonFetch(`/api/stories/${storyId}/conversation/end`, {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId }),
+    });
   },
 };
 
