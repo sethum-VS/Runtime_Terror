@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     elevenlabs_max_concurrent: int = 3
     elevenlabs_max_chars_per_request: int = 2000
+    elevenlabs_convai_model: str = "gemini-2.0-flash"
 
     model_config = SettingsConfigDict(
         env_file=".env",
