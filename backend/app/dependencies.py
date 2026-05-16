@@ -60,9 +60,11 @@ def get_gemini() -> GenerativeModel:
         cfg = get_settings()
         if not cfg.google_cloud_project:
             raise RuntimeError(
-                "GOOGLE_CLOUD_PROJECT missing in .env. "
-                "Set it to your GCP project ID and ensure GOOGLE_APPLICATION_CREDENTIALS "
-                "points to your service account key file (for local dev)."
+                "GOOGLE_CLOUD_PROJECT is not set. "
+                "Local: add it to backend/.env and set GOOGLE_APPLICATION_CREDENTIALS to your "
+                "service account JSON (or use gcloud auth application-default login). "
+                "Cloud Run: set GOOGLE_CLOUD_PROJECT on the service (deploy workflow uses "
+                "GCP_PROJECT_ID); attach a service account with Vertex AI User — no key file needed."
             )
         vertexai.init(
             project=cfg.google_cloud_project,

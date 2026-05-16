@@ -60,8 +60,12 @@ jobs:
           image: ${{ env.IMAGE }}
           flags: --allow-unauthenticated
           env_vars: |
+            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
+            GOOGLE_CLOUD_REGION=${{ secrets.GCP_REGION }}
+            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
             SUPABASE_URL=${{ secrets.SUPABASE_URL }}
             SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
             SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+            SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
             GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
             FRONTEND_URL=${{ secrets.FRONTEND_URL }}
