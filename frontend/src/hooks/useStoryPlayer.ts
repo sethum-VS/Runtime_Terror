@@ -343,7 +343,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       const audio = audioRef.current;
       if (audio) {
         navigator.sendBeacon?.(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/stories/${storyId}/session`,
+          `/api/stories/${storyId}/session`,
           new Blob(
             [
               JSON.stringify({

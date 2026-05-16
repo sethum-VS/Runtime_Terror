@@ -8,7 +8,10 @@ import type {
   UserProfile,
   BookmarkEntry,
 } from "./types";
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+
+// Relative /api/* calls are handled by `src/app/api/[...path]/route.ts`, which
+// proxies to BACKEND_URL on the server (avoids browser CORS to Cloud Run).
+const API_URL = "";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   if (typeof window === "undefined") return {};
