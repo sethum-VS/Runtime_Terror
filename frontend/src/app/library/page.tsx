@@ -94,7 +94,7 @@ export default function LibraryPage() {
             No books available
           </h3>
           <p className="font-body-md text-on-surface-variant mb-6">
-            Upload a PDF on the Upload page to add your first audiobook.
+            Upload a PDF from the home page to add your first audiobook.
           </p>
           <Link
             href="/"
@@ -103,7 +103,7 @@ export default function LibraryPage() {
             <span className="material-symbols-outlined text-[18px]">
               cloud_upload
             </span>
-            Go to Upload
+            Go to Home
           </Link>
         </motion.div>
       )}

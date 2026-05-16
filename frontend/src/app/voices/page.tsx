@@ -84,7 +84,7 @@ export default function VoicesPage() {
           <p className="font-body-md text-on-surface-variant">
             The Explore Voices library is curated by the VoiceTale team. New
             voices are added on our side—nothing for you to upload here. Check
-            back later, or continue creating stories from the Upload page.
+            back later, or continue creating stories from the home page.
           </p>
         </motion.div>
       )}

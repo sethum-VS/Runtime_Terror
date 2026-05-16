@@ -454,11 +454,11 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       setActiveWordIndex((prev) => (found !== prev ? found : prev));
     }
 
-    // Lazy next-page trigger: <= 30 s remaining and we have a next page
+    // Lazy next-page trigger: <= 50 s remaining and we have a next page
     const remaining = (audio.duration || 0) - t;
     if (
       remaining > 0 &&
-      remaining <= 30 &&
+      remaining <= 50 &&
       !nextPageRequestedRef.current &&
       story &&
       currentPage < story.total_pages
