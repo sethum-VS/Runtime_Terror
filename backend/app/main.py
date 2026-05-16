@@ -37,14 +37,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+configured_origins = {
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://voicetale-frontend.vercel.app",
+}
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|172\.\d{1,3}\.\d{1,3}\.\d{1,3}):3000",
+    allow_origins=sorted(o for o in configured_origins if o),
+    allow_origin_regex=r"(http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|172\.\d{1,3}\.\d{1,3}\.\d{1,3}):3000)|(https://.*\.vercel\.app)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

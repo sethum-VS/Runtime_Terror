@@ -7,8 +7,9 @@ import type {
   Voice,
 } from "./types";
 
-// Empty string = same-origin requests via Next.js rewrite (avoids CORS in local dev).
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+// Relative /api/* calls are handled by `src/app/api/[...path]/route.ts`, which
+// proxies to BACKEND_URL on the server (avoids browser CORS to Cloud Run).
+const API_URL = "";
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
