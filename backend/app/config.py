@@ -19,7 +19,9 @@ class Settings(BaseSettings):
 
     elevenlabs_max_concurrent: int = 3
     elevenlabs_max_chars_per_request: int = 2000
-    elevenlabs_convai_model: str = "gemini-2.0-flash"
+    elevenlabs_convai_model: str = "gemini-2.0-flash"  # ConvAI agent LLM
+    # Low-latency TTS for English ConvAI agents (language=en requires v2, not v2.5)
+    elevenlabs_convai_tts_model: str = "eleven_turbo_v2"
 
     model_config = SettingsConfigDict(
         env_file=".env",
