@@ -211,7 +211,6 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
 
   const voiceToCharacter = useMemo(
@@ -278,7 +277,6 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
 
     const ensurePage = async () => {
       setPageLoading(true);
-      setAudioReady(false);
       setPlayError(null);
       setActiveWordIndex(-1);
       setCurrentTime(0);
@@ -382,7 +380,6 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
         audio.src = url;
         audio.load();
         loadedAudioUrlRef.current = url;
-        setAudioReady(false);
       }
 
       const pageWords = pageData?.timestamps_json
@@ -410,13 +407,11 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       };
 
       const onCanPlay = () => {
-        setAudioReady(true);
         setPlayError(null);
         tryStartPlayback(audio);
       };
 
       const onError = () => {
-        setAudioReady(false);
         setPlayError("Failed to load audio for this page.");
         setIsPlaying(false);
       };
@@ -432,12 +427,11 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       };
 
       if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-        setAudioReady(true);
         if (audio.duration) setDuration(audio.duration);
         tryStartPlayback(audio);
       }
     },
-    [pageData?.audio_url, tryStartPlayback]
+    [pageData?.audio_url, pageData?.timestamps_json, tryStartPlayback]
   );
 
   // Re-bind when page audio URL changes (same element, new page)
@@ -527,7 +521,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       return;
     }
 
-    let audio = audioRef.current;
+    const audio = audioRef.current;
     if (!audio) {
       setPlayError("Audio player not ready. Refresh the page.");
       return;
@@ -624,7 +618,6 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
       shouldResumePositionRef.current = false;
       resumePositionRef.current = 0;
       loadedAudioUrlRef.current = null;
-      setAudioReady(false);
       setIsPlaying(false);
       setCurrentTime(0);
       setActiveWordIndex(-1);

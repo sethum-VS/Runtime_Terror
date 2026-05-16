@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { useReadingLibrary } from "@/context/ReadingLibraryContext";
 import { api } from "@/lib/api";
@@ -28,9 +29,11 @@ export default function ProfilePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-card-gap">
         <div className="glass-panel bg-surface/60 rounded-xl p-8 flex flex-col items-center text-center">
           {profile?.avatar_url ? (
-            <img
+            <Image
               src={profile.avatar_url}
               alt={displayName}
+              width={96}
+              height={96}
               className="w-24 h-24 rounded-full object-cover mb-4"
             />
           ) : (

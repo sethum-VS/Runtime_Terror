@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { getSupabaseClient } from "@/lib/supabaseClient";
@@ -11,7 +12,7 @@ import type { UserProfile } from "@/lib/types";
 export default function EditProfilePage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [, setProfile] = useState<UserProfile | null>(null);
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [narratorVoice, setNarratorVoice] = useState("");
@@ -116,9 +117,11 @@ export default function EditProfilePage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="flex items-center gap-6">
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt="Avatar"
+                width={80}
+                height={80}
                 className="w-20 h-20 rounded-full object-cover"
               />
             ) : (
