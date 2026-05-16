@@ -26,7 +26,7 @@ VoiceTale transforms any PDF story into an immersive multi-character audio exper
 |--------------|--------------------------------------------------------------|
 | Frontend     | Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion |
 | Backend      | Python FastAPI (async)                                       |
-| LLMs         | Gemini 2.0 Flash (Google AI Studio / Vertex AI)              |
+| LLMs         | Gemini 2.0 Flash via **Vertex AI** (service account / ADC)   |
 | Voice / TTS  | ElevenLabs — Text-to-Dialogue, Voice Design, Voice Library, Audio Tags |
 | Database     | Supabase (PostgreSQL + Storage)                              |
 | Deployment   | Vercel (frontend) + GCP Cloud Run (backend)                  |
@@ -46,7 +46,7 @@ voicetale/
 │   ├── app/
 │   │   ├── main.py          # FastAPI app + CORS + lifespan
 │   │   ├── config.py        # Pydantic settings
-│   │   ├── dependencies.py  # Supabase / ElevenLabs / Gemini clients
+│   │   ├── dependencies.py  # Supabase / ElevenLabs / Vertex AI Gemini client
 │   │   ├── models/          # Pydantic schemas
 │   │   ├── services/        # Pipeline: pdf -> parse -> profile -> dialogue -> audio
 │   │   └── routes/          # /stories, /pages, /sessions, /voices
@@ -77,40 +77,63 @@ voicetale/
 3. Verify the `story-audio` storage bucket was created
 4. Grab `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` from Project Settings → API
 
-### 2. Backend
+### 2. Google Cloud (Vertex AI)
+
+Gemini calls use the **Vertex AI SDK** with Application Default Credentials (no `GEMINI_API_KEY`).
+
+**Local development** (pick one):
+
+```powershell
+# Option A: gcloud CLI (recommended)
+gcloud auth login
+gcloud config set project YOUR_GCP_PROJECT_ID
+gcloud auth application-default login
+
+# Option B: service account JSON key
+# Set GOOGLE_APPLICATION_CREDENTIALS in backend/.env to the key file path
+```
+
+On **Cloud Run**, attach the service account (e.g. `vertexai-api@...`); ADC is automatic. GitHub Actions deploy auth uses Workload Identity Federation separately from runtime LLM auth.
+
+### 3. Backend
 
 ```powershell
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env  # fill in keys
-uvicorn app.main:app --reload --port 8000
+copy .env.example .env   # fill in keys (see Environment Variables)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Visit `http://localhost:8000/docs` to confirm.
 
-### 3. Frontend
+### 4. Frontend
 
 ```powershell
 cd frontend
 npm install
-copy .env.local.example .env.local  # set NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+copy .env.local.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` (or the LAN URL shown by Next.js — both work).
+
+API requests are proxied through Next.js (`/api/*` → backend) so you avoid CORS issues in local dev. Leave `NEXT_PUBLIC_BACKEND_URL` unset in `.env.local` unless you need direct backend calls.
 
 ## Environment Variables
+
+### Backend (`backend/.env`)
 
 ```env
 # ElevenLabs
 ELEVENLABS_API_KEY=
 
-# Google
-GOOGLE_CLOUD_PROJECT=
+# Google Cloud / Vertex AI
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GOOGLE_CLOUD_REGION=us-central1
-GEMINI_API_KEY=
+# Local dev only (optional if using gcloud auth application-default login):
+GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
 
 # Supabase
 SUPABASE_URL=
@@ -121,6 +144,23 @@ SUPABASE_SERVICE_ROLE_KEY=
 BACKEND_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:3000
 ```
+
+### Frontend (`frontend/.env.local`)
+
+```env
+# Optional: direct backend URL. Unset = proxy via Next.js (recommended locally).
+# NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+BACKEND_URL=http://localhost:8000
+
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+## Local Development Notes
+
+- **PDF upload**: Conversion uses `pymupdf4llm` with layout ML disabled (`use_layout(False)`) to avoid ONNX `int32`/`int64` errors on Windows. Text-based story PDFs work well; scanned-only PDFs may need OCR support later.
+- **CORS**: Backend allows `localhost`, `127.0.0.1`, and common LAN IPs on port 3000. Prefer the Next.js API proxy for the simplest setup.
+- **Required for uploads**: `SUPABASE_SERVICE_ROLE_KEY` must be set in `backend/.env` or story creation will fail after PDF conversion.
 
 ## API Surface (Backend)
 
