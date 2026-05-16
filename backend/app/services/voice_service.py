@@ -2,6 +2,15 @@ import asyncio
 from typing import List
 
 from app.dependencies import get_supabase, get_elevenlabs
+from app.services.voice_safety import (
+    SAFE_PREVIEW_TEXT,
+    SAFE_VOICE_DESCRIPTION,
+    SAFE_VOICE_NAME,
+    build_safe_preview_text,
+    is_blocked_generation_error,
+    sanitize_voice_description,
+    sanitize_voice_name,
+)
 
 
 async def cache_voice_library() -> int:
@@ -16,7 +25,6 @@ async def cache_voice_library() -> int:
         try:
             labels = {}
             if voice.labels:
-                # `labels` is a dict-like; copy primitive values only
                 for k, v in dict(voice.labels).items():
                     if isinstance(v, (str, int, float, bool)) or v is None:
                         labels[k] = v
@@ -59,20 +67,16 @@ def build_voice_catalog_for_llm(voices: List[dict], limit: int = 100) -> str:
     return "\n".join(lines)
 
 
-async def create_voice_from_design(name: str, prompt: str, sample_text: str) -> str:
-    """Generate previews + create a permanent voice. Returns voice_id."""
-    elevenlabs = get_elevenlabs()
-
-    sample = sample_text.strip()
+async def _create_previews_and_voice(
+    elevenlabs,
+    voice_name: str,
+    description: str,
+    sample: str,
+) -> str:
+    """Call ElevenLabs Voice Design API; returns voice_id."""
     if len(sample) < 100:
         sample = (sample + " " + ("This is a sample line for the voice preview. " * 5)).strip()
     sample = sample[:1000]
-
-    description = prompt.strip()
-    if len(description) < 20:
-        description = (description + " A clear, expressive narrator voice.")[:1000]
-    if len(description) > 1000:
-        description = description[:1000]
 
     previews = await asyncio.to_thread(
         elevenlabs.text_to_voice.create_previews,
@@ -85,9 +89,42 @@ async def create_voice_from_design(name: str, prompt: str, sample_text: str) -> 
 
     voice = await asyncio.to_thread(
         elevenlabs.text_to_voice.create_voice_from_preview,
-        voice_name=name[:80] or "VoiceTale Character",
+        voice_name=voice_name[:80] or SAFE_VOICE_NAME,
         voice_description=description,
         generated_voice_id=previews.previews[0].generated_voice_id,
     )
 
     return voice.voice_id
+
+
+async def create_voice_from_design(
+    name: str,
+    prompt: str,
+    sample_text: str,
+    *,
+    role: str = "supporting",
+    estimated_age: str = "adult",
+    gender: str = "other",
+    character_id: str | None = None,
+) -> str:
+    """Generate previews + create a permanent voice. Returns voice_id."""
+    elevenlabs = get_elevenlabs()
+
+    description = sanitize_voice_description(prompt)
+    sample = build_safe_preview_text(role=role, estimated_age=estimated_age, gender=gender)
+    voice_name = sanitize_voice_name(name, character_id)
+
+    try:
+        return await _create_previews_and_voice(elevenlabs, voice_name, description, sample)
+    except Exception as e:
+        if not is_blocked_generation_error(e):
+            raise
+        print(
+            f"[voice_service] Voice Design blocked for '{name}', retrying with safe fallback: {e}"
+        )
+        return await _create_previews_and_voice(
+            elevenlabs,
+            SAFE_VOICE_NAME,
+            SAFE_VOICE_DESCRIPTION,
+            SAFE_PREVIEW_TEXT,
+        )

@@ -38,6 +38,10 @@ Delivery: [speaks firmly], [speaks slowly], [speaks softly], [cautiously], [dram
 
 DO NOT use non-auditory tags like [standing], [grinning], [pacing], [music].
 
+ELEVENLABS SAFETY:
+- Audio tags must be family-friendly and auditory only.
+- Do NOT use tags implying violence, sexual content, harassment, or non-auditory actions.
+
 Output the final inputs[] in the same order as the raw segments. Each segment becomes one input.
 """
 

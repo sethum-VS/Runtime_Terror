@@ -7,6 +7,7 @@ from app.services.voice_service import (
     build_voice_catalog_for_llm,
     create_voice_from_design,
 )
+from app.services.voice_safety import build_safe_preview_text
 
 # Default fallback voice when Voice Design fails (premade ElevenLabs voice "George")
 DEFAULT_FALLBACK_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
@@ -26,13 +27,24 @@ FOR EACH CHARACTER, decide:
 A) "library_match" - if a voice in the catalog fits well, use its VOICE_ID
 B) "voice_design" - if no good match exists, write a Voice Design prompt
 
-Voice Design prompts MUST be 20-1000 characters and follow this structure:
-"A [age descriptor] [gender] voice with a [tone quality] tone. [Speaking pace]. [Distinctive quality]. [Character trait reflected in voice]."
+Voice Design prompts MUST be 20-1000 characters and describe ONLY acoustic qualities:
+"A [age descriptor] [gender] voice with a [tone quality] tone. [Speaking pace]. [Distinctive vocal quality]."
+
+ELEVENLABS VOICE DESIGN SAFETY (required):
+- Describe ONLY pitch, pace, tone, warmth, clarity, accent—never plot, relationships, or backstory.
+- FORBIDDEN in voice_design_prompt: violence, weapons, threats, sexual or romantic content, slurs,
+  hate, self-harm, drugs, impersonation of real people, or sensitive descriptions of minors.
+- Do NOT reference story events, character relationships, twins, pregnancy, or provocative traits.
+- Prefer library_match whenever any catalog voice is a reasonable fit (saves API calls).
+- For narrator role: ALWAYS use library_match with a warm narrator voice from the catalog.
 
 GOOD Voice Design prompt examples:
-- "A massive evil ogre speaking at a quick pace. He has a silly and resonant tone."
-- "A young curious girl, around 8 years old. Bright, energetic, and slightly mischievous. She speaks quickly with wonder in her voice."
-- "An elderly wise woman with a calm, measured pace. Warm and comforting, like a grandmother telling stories by the fireplace."
+- "A warm adult female voice with a calm, measured pace and gentle tone. Clear and expressive, suited for audiobook narration."
+- "A young adult male voice with a bright, energetic tone. Speaks at a moderate pace with friendly clarity."
+- "An elderly male voice with a deep, steady tone. Slow pace, warm and reassuring."
+
+BAD examples (will be blocked):
+- "Twin children who sound seductive..." or anything tied to story events or relationships.
 
 OUTPUT (valid JSON only, no markdown):
 {
@@ -57,10 +69,10 @@ OUTPUT (valid JSON only, no markdown):
 }
 
 RULES:
-- Always assign a narrator voice (clear, warm, theatrical narrator from library if possible).
-- Voice Design prompts must be 20-1000 characters.
-- Match character personality to voice qualities.
-- Prefer library_match when a good fit exists (saves API calls).
+- Always assign a narrator voice via library_match when possible.
+- Voice Design prompts must be 20-1000 characters and acoustic-only.
+- Match speaking_style to vocal tone (e.g. gruff -> deeper tone), not story content.
+- Prefer library_match when a good fit exists.
 - Distinct characters should get distinct voices.
 """
 
@@ -121,6 +133,7 @@ async def profile_characters_and_assign_voices(story_id: str):
         raise ValueError(f"Profiler returned invalid JSON: {e}")
 
     valid_voice_ids = {v["voice_id"] for v in voices}
+    char_by_id = {c["character_id"]: c for c in characters}
 
     for assignment in result.get("assignments", []):
         char_id = assignment.get("character_id")
@@ -141,12 +154,20 @@ async def profile_characters_and_assign_voices(story_id: str):
 
         elif strategy == "voice_design":
             design_prompt = assignment.get("voice_design_prompt") or ""
-            sample = _get_sample_dialogue(story_id, char_id, assignment.get("name", "Character"))
+            char_meta = char_by_id.get(char_id, {})
             try:
                 voice_id = await create_voice_from_design(
                     name=assignment.get("name", "VoiceTale Character"),
                     prompt=design_prompt,
-                    sample_text=sample,
+                    sample_text=build_safe_preview_text(
+                        role=char_meta.get("role", "supporting"),
+                        estimated_age=char_meta.get("estimated_age", "adult"),
+                        gender=char_meta.get("gender", "other"),
+                    ),
+                    role=char_meta.get("role", "supporting"),
+                    estimated_age=char_meta.get("estimated_age", "adult"),
+                    gender=char_meta.get("gender", "other"),
+                    character_id=char_id,
                 )
             except Exception as e:
                 print(f"[profiler] Voice Design failed for {assignment.get('name')}: {e}")
@@ -173,25 +194,3 @@ async def profile_characters_and_assign_voices(story_id: str):
             }).eq("id", c["id"]).execute()
 
 
-def _get_sample_dialogue(story_id: str, char_id: str, fallback_name: str) -> str:
-    """Pull a sample dialogue line for Voice Design preview."""
-    supabase = get_supabase()
-    pages = (
-        supabase.table("story_pages")
-        .select("raw_segments")
-        .eq("story_id", story_id)
-        .order("page_number")
-        .limit(5)
-        .execute()
-    )
-    for page in (pages.data or []):
-        for seg in (page.get("raw_segments") or []):
-            if seg.get("character_id") == char_id and seg.get("type") == "dialogue":
-                text = (seg.get("text") or "").strip()
-                if len(text) >= 30:
-                    return text[:500]
-
-    return (
-        f"Hello, my name is {fallback_name}. "
-        "Let me tell you a tale of wonder, mystery, and adventure that begins long ago."
-    )
