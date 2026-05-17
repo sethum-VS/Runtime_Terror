@@ -189,6 +189,29 @@ export function HeroSection() {
           <FeaturePill icon="surround_sound" label="Read-Along Sync" />
           <FeaturePill icon="menu_book" label="Page-by-Page Audio" />
         </div>
+
+        {!authLoading && !user && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-1 flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary-container/40 border border-outline-variant/30"
+          >
+            <span className="material-symbols-outlined text-secondary text-[20px]">
+              library_books
+            </span>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              New here? Explore our{" "}
+              <a
+                href="/library"
+                className="text-primary font-medium underline underline-offset-2 hover:text-secondary transition-colors"
+              >
+                curated stories
+              </a>{" "}
+              — no sign-in needed.
+            </p>
+          </motion.div>
+        )}
       </div>
 
       {/* Right side showcase — hidden on mobile */}
