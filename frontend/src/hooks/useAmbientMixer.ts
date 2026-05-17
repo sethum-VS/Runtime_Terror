@@ -494,16 +494,19 @@ export function useAmbientMixer(
   }, [currentTime, duration, playTrackAudio]);
 
   const toggleEnabled = useCallback(() => {
-    setIsEnabled((prev) => {
-      const next = !prev;
-      if (next && isStoryPlayingRef.current) {
+    const next = !isEnabledRef.current;
+    // Update ref synchronously so playTrackAudio's isEnabledRef check passes
+    // before React commits the state update.
+    isEnabledRef.current = next;
+    setIsEnabled(next);
+    if (next) {
+      if (isStoryPlayingRef.current) {
         void playActiveVibe(false);
-      } else {
-        silenceEverything();
-        activeUrlRef.current = null;
       }
-      return next;
-    });
+    } else {
+      silenceEverything();
+      activeUrlRef.current = null;
+    }
   }, [playActiveVibe, silenceEverything]);
 
   const setVolume = useCallback((slider: number) => {

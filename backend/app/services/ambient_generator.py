@@ -13,7 +13,7 @@ settings = get_settings()
 
 _ambient_locks: dict[tuple[str, int], asyncio.Lock] = {}
 
-VIBE_ANALYSIS_PROMPT = """You are a film-score composer choosing LOOPING MUSICAL AMBIENT beds for an audiobook. Narration plays on top — music must be emotional, cinematic, and quiet (not distracting).
+VIBE_ANALYSIS_PROMPT = """You are a film-score composer choosing LOOPING MUSICAL AMBIENT beds for an audiobook. Narration plays on top — music must be emotional, cinematic, calm, and quiet (not distracting).
 
 ### Musical atmosphere (from parser)
 {setting}
@@ -31,16 +31,17 @@ For EACH zone return:
 - "end_segment": last segment index (inclusive)
 
 ### Musical ambient rules (critical)
+- CALM TYPE BEAT: the bed must always feel calm, soft, and restrained. You CAN express any emotion (joy, dread, melancholy, romance, tension, wonder) — but ALWAYS through gentle harmony, texture, and dynamics, NEVER through hard beats, driving rhythm, or loud percussion. Think "calm cinematic underscore" even for intense feelings.
 - INSTRUMENTAL ONLY: soft pads, drones, atmospheric underscore — like a gentle film score bed
-- Match story mood from segment emotions and text:
+- Match story mood from segment emotions and text, keeping the calm character intact:
   - sad / melancholic → slow minor piano, sparse strings, soft synth pad
-  - tense / scared → low pulsing drone, dissonant soft strings, dark ambient texture
+  - tense / scared → low calm pulsing drone, dissonant soft strings, dark ambient texture (NO hard beats)
   - happy / warm → major key soft piano or acoustic guitar harmonics, light strings wash
   - romantic → warm legato strings pad, soft piano chords
   - mysterious → ambient synth pad, subtle low bells, airy texture
-  - action (rare) → still slow underscore, NOT percussion-heavy — low rhythmic pulse only if needed
-- Tempo: slow (60-80 bpm feel), low dynamics, no sudden changes
-- NO vocals/choir/lyrics, NO drums or percussion, NO catchy lead melody, NO EDM, NO trailer hits
+  - action (rare) → still calm slow underscore, NOT percussion-heavy — at most a very soft, low rhythmic pulse if absolutely needed
+- Tempo: slow (60-80 bpm feel), low dynamics, no sudden changes, no hard hits
+- NO vocals/choir/lyrics, NO drums or percussion, NO hard beats, NO catchy lead melody, NO EDM, NO trap, NO trailer hits, NO build-ups or drops
 - NO environmental SFX focus (rain, crowds, traffic) unless blended very quietly under the music
 - Genre-appropriate: period drama → piano/strings; fantasy → ethereal pads; modern → minimal synth ambient
 
@@ -62,11 +63,12 @@ Story excerpt for this section:
 Draft: {draft}
 
 Write ONE prompt (25-45 words). Requirements:
+- CALM TYPE BEAT: the track must always feel calm and restrained. Emotions are fine (joy, sadness, romance, tension, dread, wonder), but expressed through soft harmony, texture, and dynamics — NEVER through hard beats or driving percussion.
 - Describe MUSICAL ambient: pads, drones, soft piano, strings, synth atmosphere, guitar harmonics — pick what fits the excerpt
-- Must match emotional arc in the excerpt (not generic epic music)
+- Must match emotional arc in the excerpt (not generic epic music), while keeping a calm character
 - Slow, soft, cinematic, seamless loop, low dynamics under spoken voice
-- Say "instrumental", "ambient music", "underscore", or "film score bed"
-- NO vocals, NO drums/percussion, NO loud brass, NO drops, NO sound effects as the main element
+- Say "instrumental", "ambient music", "underscore", or "film score bed"; you may also say "calm" explicitly
+- NO vocals, NO drums/percussion, NO hard beats, NO loud brass, NO drops, NO build-ups, NO sound effects as the main element
 
 Return ONLY the prompt string, no quotes."""
 
@@ -133,8 +135,8 @@ def _ensure_music_ambient_prompt(prompt: str) -> str:
     p = (prompt or "").strip()
     if not p:
         return (
-            "Soft instrumental ambient music bed, slow piano and warm string pad, "
-            "cinematic underscore for audiobook, gentle loop, no vocals no drums"
+            "Calm instrumental ambient music bed, slow piano and warm string pad, "
+            "cinematic underscore for audiobook, gentle seamless loop, no vocals, no drums, no hard beats"
         )
     lower = p.lower()
     if not any(
@@ -152,11 +154,15 @@ def _ensure_music_ambient_prompt(prompt: str) -> str:
             "score",
         )
     ):
-        p = f"Soft instrumental ambient music, {p}"
+        p = f"Calm instrumental ambient music, {p}"
+    if not any(w in lower for w in ("calm", "gentle", "soft", "slow")):
+        p = f"Calm and gentle, {p}"
     if "vocal" not in lower:
         p = f"{p}, no vocals"
     if not any(w in lower for w in ("drum", "percussion", "beat")):
-        p = f"{p}, no drums"
+        p = f"{p}, no drums, no hard beats"
+    elif "no hard beat" not in lower and "no drum" not in lower:
+        p = f"{p}, no hard beats"
     if "loop" not in lower and "continuous" not in lower:
         p = f"{p}, seamless looping underscore"
     return p[:500]
@@ -168,14 +174,14 @@ async def _infer_setting(raw_segments: list) -> str:
         return ""
 
     gemini = get_gemini()
-    prompt = f"""You compose subtle MUSICAL ambient beds for audiobook narration (instrumental underscore).
+    prompt = f"""You compose subtle MUSICAL ambient beds for audiobook narration (instrumental underscore). The bed must always be a CALM TYPE BEAT — emotional but never hard-hitting.
 
 From this page, describe the musical mood in 15-30 words:
-- Core emotion (melancholy, tension, wonder, warmth, dread, hope)
+- Core emotion (melancholy, tension, wonder, warmth, dread, hope) — emotions OK, but expressed calmly
 - Suggested instruments (soft piano, string pad, synth drone, guitar harmonics, etc.)
 - Genre/period feel if obvious (Victorian drama, fantasy, noir, contemporary)
-- Tempo and energy: slow, gentle, low dynamics — must sit UNDER spoken voice
-- Instrumental only — no vocals, no drums
+- Tempo and energy: slow, gentle, calm, low dynamics — must sit UNDER spoken voice
+- Instrumental only — no vocals, no drums, no hard beats
 
 Character emotions on page: {emotions}
 
