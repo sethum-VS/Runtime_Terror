@@ -9,10 +9,12 @@ interface PlayerControlsProps {
   nextPageStatus: "idle" | "generating" | "ready";
   canPlay?: boolean;
   pageLoading?: boolean;
+  isAmbientEnabled?: boolean;
   onTogglePlay: () => void;
   onSeek: (s: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  onToggleAmbient?: () => void;
 }
 
 export function PlayerControls({
@@ -24,10 +26,12 @@ export function PlayerControls({
   nextPageStatus,
   canPlay = true,
   pageLoading = false,
+  isAmbientEnabled = true,
   onTogglePlay,
   onSeek,
   onPrev,
   onNext,
+  onToggleAmbient,
 }: PlayerControlsProps) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const playDisabled = pageLoading || (!canPlay && !isPlaying);
@@ -108,6 +112,23 @@ export function PlayerControls({
             skip_next
           </span>
         </button>
+
+        {onToggleAmbient && (
+          <button
+            onClick={onToggleAmbient}
+            className={`ml-2 transition-all ${
+              isAmbientEnabled
+                ? "text-primary hover:text-primary/80"
+                : "text-on-surface-variant/40 hover:text-on-surface-variant"
+            }`}
+            aria-label={isAmbientEnabled ? "Disable ambient sounds" : "Enable ambient sounds"}
+            title="Ambient sounds"
+          >
+            <span className="material-symbols-outlined text-[28px]">
+              surround_sound
+            </span>
+          </button>
+        )}
       </div>
 
       {nextPageStatus === "generating" && (

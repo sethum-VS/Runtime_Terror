@@ -81,10 +81,12 @@ export function HeroSection() {
       // see the steps advancing rather than appearing "stuck".
       stopPolling();
       let stopped = false;
+      let transientErrors = 0;
       const tick = async () => {
         if (stopped) return;
         try {
           const s = await api.getStory(story.id);
+          transientErrors = 0;
           if (stopped) return;
           setStatus(s.status as StoryStatus);
           if (s.status === "ready") {
@@ -98,14 +100,27 @@ export function HeroSection() {
             setError(s.error_message || "Processing failed. Please try again.");
           }
         } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const isTransient =
+            msg.includes("503") ||
+            msg.includes("504") ||
+            /timeout|recvmsg|timed out/i.test(msg);
+          if (isTransient && transientErrors < 8) {
+            transientErrors += 1;
+            return;
+          }
           stopped = true;
           stopPolling();
           setProcessing(false);
-          setError(e instanceof Error ? e.message : "Polling failed");
+          setError(
+            isTransient
+              ? "Connection to the server timed out. Please refresh and try again."
+              : msg || "Polling failed"
+          );
         }
       };
       void tick();
-      pollRef.current = setInterval(tick, 1000);
+      pollRef.current = setInterval(tick, 2000);
     } catch (e) {
       setUploading(false);
       const msg = e instanceof Error ? e.message : "Upload failed";
