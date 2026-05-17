@@ -3,8 +3,7 @@ import time
 from typing import Callable, Optional, TypeVar
 
 import httpx
-from supabase import create_client, Client
-from supabase.lib.client_options import ClientOptions
+from supabase import Client, ClientOptions, create_client
 from elevenlabs.client import ElevenLabs
 import vertexai
 from vertexai.generative_models import GenerativeModel
@@ -35,12 +34,13 @@ def get_supabase() -> Client:
             raise RuntimeError(
                 "Supabase credentials missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env"
             )
+        # ClientOptions is SyncClientOptions in supabase-py 2.x (required for .storage session store).
         _supabase = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key,
             options=ClientOptions(
-                postgrest_client_timeout=httpx.Timeout(60.0, connect=15.0),
-                storage_client_timeout=httpx.Timeout(60.0, connect=15.0),
+                postgrest_client_timeout=60.0,
+                storage_client_timeout=60,
             ),
         )
     return _supabase
