@@ -54,7 +54,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-background text-on-background font-body-md overflow-x-hidden cinematic-bg min-h-screen flex flex-col">
+      <body
+        className="bg-background text-on-background font-body-md overflow-x-hidden cinematic-bg min-h-screen flex flex-col"
+        suppressHydrationWarning
+      >
         <AppProviders>
           <Navbar />
           <div className="flex-1 flex flex-col">{children}</div>

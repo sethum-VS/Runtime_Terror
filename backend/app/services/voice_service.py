@@ -1,13 +1,19 @@
 import asyncio
-from typing import List
+from typing import List, Optional, Set
 
 from app.dependencies import get_supabase, get_elevenlabs
+from app.utils.voice_errors import (
+    VoiceErrorKind,
+    classify_voice_error,
+    refine_prompt_for_retry,
+    retry_voice_name,
+)
+from app.utils.voice_logging import log_voice_attempt
 from app.services.voice_safety import (
     SAFE_PREVIEW_TEXT,
     SAFE_VOICE_DESCRIPTION,
     SAFE_VOICE_NAME,
     build_safe_preview_text,
-    is_blocked_generation_error,
     sanitize_voice_description,
     sanitize_voice_name,
 )
@@ -97,6 +103,53 @@ async def _create_previews_and_voice(
     return voice.voice_id
 
 
+def pick_library_voice_fallback(
+    voices: List[dict],
+    used_voice_ids: Set[str],
+    *,
+    gender: str = "other",
+    estimated_age: str = "adult",
+    exclude_voice_ids: Optional[Set[str]] = None,
+) -> Optional[str]:
+    """Pick an unused premade/library voice that roughly matches gender/age (not narrator default)."""
+    exclude = exclude_voice_ids or set()
+    candidates: list[tuple[int, str]] = []
+
+    for v in voices:
+        vid = v.get("voice_id")
+        if not vid or vid in used_voice_ids or vid in exclude:
+            continue
+        labels = v.get("labels") or {}
+        v_gender = str(labels.get("gender", "")).lower()
+        v_age = str(labels.get("age", "")).lower()
+
+        score = 0
+        g = gender.lower()
+        if g in ("male", "female") and v_gender == g:
+            score += 2
+        if estimated_age in ("child", "teen", "young_adult", "adult", "elderly"):
+            age_map = {
+                "child": ("child", "young"),
+                "teen": ("young", "teen"),
+                "young_adult": ("young", "middle aged"),
+                "adult": ("middle aged", "adult"),
+                "elderly": ("old", "elderly"),
+            }
+            if any(a in v_age for a in age_map.get(estimated_age, ())):
+                score += 1
+        candidates.append((score, vid))
+
+    if not candidates:
+        for v in voices:
+            vid = v.get("voice_id")
+            if vid and vid not in used_voice_ids and vid not in exclude:
+                return vid
+        return None
+
+    candidates.sort(key=lambda x: (-x[0], x[1]))
+    return candidates[0][1]
+
+
 async def create_voice_from_design(
     name: str,
     prompt: str,
@@ -106,25 +159,45 @@ async def create_voice_from_design(
     estimated_age: str = "adult",
     gender: str = "other",
     character_id: str | None = None,
+    max_attempts: int = 3,
 ) -> str:
-    """Generate previews + create a permanent voice. Returns voice_id."""
+    """Generate previews + create a permanent voice. Retries up to max_attempts with safer prompts."""
     elevenlabs = get_elevenlabs()
+    max_attempts = max(1, min(max_attempts, 5))
 
     description = sanitize_voice_description(prompt)
     sample = build_safe_preview_text(role=role, estimated_age=estimated_age, gender=gender)
     voice_name = sanitize_voice_name(name, character_id)
 
-    try:
-        return await _create_previews_and_voice(elevenlabs, voice_name, description, sample)
-    except Exception as e:
-        if not is_blocked_generation_error(e):
-            raise
-        print(
-            f"[voice_service] Voice Design blocked for '{name}', retrying with safe fallback: {e}"
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        desc = description if attempt == 1 else refine_prompt_for_retry(
+            description, classify_voice_error(last_exc) if last_exc else VoiceErrorKind.UNKNOWN, attempt
         )
-        return await _create_previews_and_voice(
-            elevenlabs,
-            SAFE_VOICE_NAME,
-            SAFE_VOICE_DESCRIPTION,
-            SAFE_PREVIEW_TEXT,
-        )
+        vname = voice_name if attempt == 1 else retry_voice_name(voice_name, character_id, attempt)
+        if attempt >= max_attempts and last_exc and classify_voice_error(last_exc) == VoiceErrorKind.BLOCKED:
+            desc = SAFE_VOICE_DESCRIPTION
+            vname = SAFE_VOICE_NAME
+            sample = SAFE_PREVIEW_TEXT
+
+        try:
+            voice_id = await _create_previews_and_voice(elevenlabs, vname, desc, sample)
+            log_voice_attempt(name, character_id, attempt, max_attempts, success=True)
+            return voice_id
+        except Exception as e:
+            last_exc = e
+            kind = classify_voice_error(e)
+            log_voice_attempt(name, character_id, attempt, max_attempts, error_kind=kind, detail=str(e))
+            if kind == VoiceErrorKind.RATE_LIMIT and attempt < max_attempts:
+                await asyncio.sleep(min(2 ** attempt, 8))
+                continue
+            if attempt < max_attempts:
+                description = desc
+                if kind == VoiceErrorKind.DUPLICATE_NAME:
+                    voice_name = vname
+                continue
+            break
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Voice Design failed with no error detail")
