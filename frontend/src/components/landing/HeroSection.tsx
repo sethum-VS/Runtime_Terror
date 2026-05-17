@@ -193,7 +193,7 @@ export function HeroSection() {
 
       {/* Right side showcase — hidden on mobile */}
       <div className="hidden md:block col-span-1 md:col-span-7 relative h-[600px] w-full mt-12 md:mt-0">
-        <ShowcaseGraphic />
+        <ShowcaseGraphic scanning={uploading || processing} />
       </div>
     </section>
   );
@@ -352,9 +352,14 @@ function ProcessingPanel({
   );
 }
 
-function ShowcaseGraphic() {
+function ShowcaseGraphic({ scanning = false }: { scanning?: boolean }) {
   return (
-    <div className="absolute inset-0 glass-panel rounded-xl overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.12)] bg-gradient-to-br from-primary-fixed/40 via-surface to-secondary-fixed/30">
+    <div
+      className={`absolute inset-0 glass-panel rounded-xl overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.12)] bg-gradient-to-br from-primary-fixed/40 via-surface to-secondary-fixed/30 ${
+        scanning ? "book-scanning" : ""
+      }`}
+      aria-busy={scanning || undefined}
+    >
       {/* Decorative gradient orbs */}
       <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-primary-fixed/40 blur-3xl" />
       <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full bg-secondary-fixed/40 blur-3xl" />
@@ -374,6 +379,19 @@ function ShowcaseGraphic() {
             <stop offset="0%" stopColor="#031f41" />
             <stop offset="100%" stopColor="#1d3557" />
           </linearGradient>
+          {/* Scanner beam gradient — bright in the middle, fades at edges */}
+          <linearGradient id="scanBeam" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#735c00" stopOpacity="0" />
+            <stop offset="45%" stopColor="#735c00" stopOpacity="0.55" />
+            <stop offset="50%" stopColor="#ffe088" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="#735c00" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#735c00" stopOpacity="0" />
+          </linearGradient>
+          {/* Clip the scanner to the book area so the beam only sweeps the pages */}
+          <clipPath id="bookClip">
+            <path d="M0 40 Q120 0 240 40 L240 360 Q120 320 0 360 Z" />
+            <path d="M240 40 Q360 0 480 40 L480 360 Q360 320 240 360 Z" />
+          </clipPath>
         </defs>
 
         <g transform="translate(60,80)">
@@ -420,27 +438,59 @@ function ShowcaseGraphic() {
               opacity={0.25}
             />
           ))}
+
+          {/* Scanner beam — only visible while scanning */}
+          {scanning && (
+            <g clipPath="url(#bookClip)">
+              {/* Soft gradient sweep across the book */}
+              <rect
+                className="book-scan-beam"
+                x={-20}
+                y={-80}
+                width={520}
+                height={80}
+                fill="url(#scanBeam)"
+              />
+              {/* Crisp scanline edge on the leading edge of the beam */}
+              <rect
+                className="book-scan-line"
+                x={-20}
+                y={-80}
+                width={520}
+                height={1.5}
+                fill="#ffe088"
+              />
+            </g>
+          )}
         </g>
       </svg>
 
-      {/* Floating overlays */}
+      {/* Scanning status overlay — replaces "Live Narration" while scanning */}
       <div className="absolute top-8 left-8 glass-panel bg-surface/85 p-4 rounded-lg flex items-center gap-3 max-w-[260px] shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
         <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
           <span className="material-symbols-outlined text-on-primary text-[20px]">
-            graphic_eq
+            {scanning ? "document_scanner" : "graphic_eq"}
           </span>
         </div>
         <div className="flex-1">
           <div className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">
-            Live Narration
+            {scanning ? "Scanning Book" : "Live Narration"}
           </div>
-          <div className="flex items-end h-4 mt-1 text-secondary">
-            <span className="wave-bar h-full" />
-            <span className="wave-bar h-2/3" />
-            <span className="wave-bar h-4/5" />
-            <span className="wave-bar h-1/2" />
-            <span className="wave-bar h-full" />
-          </div>
+          {scanning ? (
+            <div className="flex items-center gap-1 mt-1 text-secondary">
+              <span className="scan-dot" />
+              <span className="scan-dot" />
+              <span className="scan-dot" />
+            </div>
+          ) : (
+            <div className="flex items-end h-4 mt-1 text-secondary">
+              <span className="wave-bar h-full" />
+              <span className="wave-bar h-2/3" />
+              <span className="wave-bar h-4/5" />
+              <span className="wave-bar h-1/2" />
+              <span className="wave-bar h-full" />
+            </div>
+          )}
         </div>
       </div>
 
