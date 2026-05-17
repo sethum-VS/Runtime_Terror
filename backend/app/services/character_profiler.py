@@ -6,6 +6,7 @@ from app.services.voice_service import (
     get_cached_voices,
     build_voice_catalog_for_llm,
     create_voice_from_design,
+    pick_library_voice_fallback,
 )
 from app.services.voice_safety import build_safe_preview_text
 
@@ -134,6 +135,8 @@ async def profile_characters_and_assign_voices(story_id: str):
 
     valid_voice_ids = {v["voice_id"] for v in voices}
     char_by_id = {c["character_id"]: c for c in characters}
+    used_voice_ids: set[str] = set()
+    narrator_voice_id: str | None = None
 
     for assignment in result.get("assignments", []):
         char_id = assignment.get("character_id")
@@ -143,40 +146,66 @@ async def profile_characters_and_assign_voices(story_id: str):
         voice_id = None
         strategy = assignment.get("voice_strategy")
 
+        char_meta = char_by_id.get(char_id, {})
+        char_role = char_meta.get("role", "supporting")
+
         if strategy == "library_match":
             candidate = assignment.get("library_voice_id")
             if candidate and candidate in valid_voice_ids:
                 voice_id = candidate
             else:
-                # Fallback if LLM hallucinated a voice_id
-                voice_id = DEFAULT_FALLBACK_VOICE_ID
+                voice_id = pick_library_voice_fallback(
+                    voices,
+                    used_voice_ids,
+                    gender=char_meta.get("gender", "other"),
+                    estimated_age=char_meta.get("estimated_age", "adult"),
+                    exclude_voice_ids={narrator_voice_id} if narrator_voice_id else None,
+                ) or DEFAULT_FALLBACK_VOICE_ID
                 strategy = "library_match"
 
         elif strategy == "voice_design":
             design_prompt = assignment.get("voice_design_prompt") or ""
-            char_meta = char_by_id.get(char_id, {})
             try:
                 voice_id = await create_voice_from_design(
                     name=assignment.get("name", "VoiceTale Character"),
                     prompt=design_prompt,
                     sample_text=build_safe_preview_text(
-                        role=char_meta.get("role", "supporting"),
+                        role=char_role,
                         estimated_age=char_meta.get("estimated_age", "adult"),
                         gender=char_meta.get("gender", "other"),
                     ),
-                    role=char_meta.get("role", "supporting"),
+                    role=char_role,
                     estimated_age=char_meta.get("estimated_age", "adult"),
                     gender=char_meta.get("gender", "other"),
                     character_id=char_id,
+                    max_attempts=3,
                 )
             except Exception as e:
-                print(f"[profiler] Voice Design failed for {assignment.get('name')}: {e}")
-                voice_id = DEFAULT_FALLBACK_VOICE_ID
+                print(
+                    f"[profiler] Voice Design exhausted retries for {assignment.get('name')}: {e}"
+                )
+                voice_id = pick_library_voice_fallback(
+                    voices,
+                    used_voice_ids,
+                    gender=char_meta.get("gender", "other"),
+                    estimated_age=char_meta.get("estimated_age", "adult"),
+                    exclude_voice_ids={narrator_voice_id} if narrator_voice_id else None,
+                ) or DEFAULT_FALLBACK_VOICE_ID
                 strategy = "library_match"
 
         else:
-            voice_id = DEFAULT_FALLBACK_VOICE_ID
+            voice_id = pick_library_voice_fallback(
+                voices,
+                used_voice_ids,
+                gender=char_meta.get("gender", "other"),
+                estimated_age=char_meta.get("estimated_age", "adult"),
+                exclude_voice_ids={narrator_voice_id} if narrator_voice_id else None,
+            ) or DEFAULT_FALLBACK_VOICE_ID
             strategy = "library_match"
+
+        if char_role == "narrator":
+            narrator_voice_id = voice_id
+        used_voice_ids.add(voice_id)
 
         supabase.table("characters").update({
             "voice_strategy": strategy,
@@ -188,9 +217,17 @@ async def profile_characters_and_assign_voices(story_id: str):
     chars_after = supabase.table("characters").select("*").eq("story_id", story_id).execute()
     for c in (chars_after.data or []):
         if not c.get("voice_id"):
+            fallback = pick_library_voice_fallback(
+                voices,
+                used_voice_ids,
+                gender=c.get("gender", "other"),
+                estimated_age=c.get("estimated_age", "adult"),
+                exclude_voice_ids={narrator_voice_id} if narrator_voice_id else None,
+            ) or DEFAULT_FALLBACK_VOICE_ID
+            used_voice_ids.add(fallback)
             supabase.table("characters").update({
                 "voice_strategy": "library_match",
-                "voice_id": DEFAULT_FALLBACK_VOICE_ID,
+                "voice_id": fallback,
             }).eq("id", c["id"]).execute()
 
 
