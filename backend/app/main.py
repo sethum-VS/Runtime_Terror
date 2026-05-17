@@ -2,6 +2,7 @@ import logging
 import traceback
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -54,7 +55,7 @@ app.add_middleware(
 )
 
 # Routes
-from app.routes import stories, pages, voices, sessions, profiles, bookmarks, conversation  # noqa: E402
+from app.routes import stories, pages, voices, sessions, profiles, bookmarks, conversation, ambient  # noqa: E402
 
 app.include_router(stories.router, prefix="/api", tags=["Stories"])
 app.include_router(pages.router, prefix="/api", tags=["Pages"])
@@ -63,12 +64,30 @@ app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
 app.include_router(profiles.router, prefix="/api", tags=["Profile"])
 app.include_router(bookmarks.router, prefix="/api", tags=["Bookmarks"])
 app.include_router(conversation.router, prefix="/api", tags=["Conversation"])
+app.include_router(ambient.router, prefix="/api", tags=["Ambient"])
+
+
+def _is_upstream_timeout(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    if isinstance(exc, (httpx.TimeoutException, httpx.ReadTimeout, httpx.ConnectTimeout)):
+        return True
+    return "timeout" in msg or "recvmsg" in msg or "timed out" in msg
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled error on %s %s", request.method, request.url.path)
     traceback.print_exc()
+    if _is_upstream_timeout(exc):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": (
+                    "Database connection timed out. Please retry in a few seconds "
+                    "(Supabase may be busy during story processing)."
+                ),
+            },
+        )
     return JSONResponse(
         status_code=500,
         content={"detail": str(exc) or "Internal Server Error"},

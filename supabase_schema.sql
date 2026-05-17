@@ -5,8 +5,21 @@
 -- ============================================
 
 -- ============================================
+-- DROP EXISTING STORAGE POLICIES (survive table drops)
+-- ============================================
+DROP POLICY IF EXISTS "Public read access for story-audio" ON storage.objects;
+DROP POLICY IF EXISTS "Service role upload for story-audio" ON storage.objects;
+DROP POLICY IF EXISTS "Service role update for story-audio" ON storage.objects;
+DROP POLICY IF EXISTS "Service role delete for story-audio" ON storage.objects;
+DROP POLICY IF EXISTS "Public read access for avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated insert for avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated update for avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated delete for avatars" ON storage.objects;
+
+-- ============================================
 -- DROP EXISTING TABLES (clean reset)
 -- ============================================
+DROP TABLE IF EXISTS page_ambient_tracks CASCADE;
 DROP TABLE IF EXISTS user_bookmarks CASCADE;
 DROP TABLE IF EXISTS story_sessions CASCADE;
 DROP TABLE IF EXISTS voice_library CASCADE;
@@ -82,10 +95,31 @@ CREATE TABLE story_pages (
     dialogue_json JSONB,
     audio_url TEXT,
     timestamps_json JSONB,
+    ambient_setting TEXT,
     char_count INT DEFAULT 0,
     error_message TEXT,
     generated_at TIMESTAMPTZ,
     UNIQUE(story_id, page_number)
+);
+
+-- ============================================
+-- 4b. Page Ambient Tracks (Sound Effects layers)
+-- ============================================
+CREATE TABLE page_ambient_tracks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    page_number INT NOT NULL,
+    layer_index INT NOT NULL DEFAULT 0,
+    label TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    audio_url TEXT,
+    duration_seconds FLOAT,
+    default_volume FLOAT DEFAULT 0.3,
+    start_fraction FLOAT DEFAULT 0,
+    status TEXT DEFAULT 'idle'
+        CHECK (status IN ('idle','generating','ready','failed')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(story_id, page_number, layer_index)
 );
 
 -- ============================================
@@ -134,6 +168,7 @@ CREATE INDEX idx_stories_showcase ON stories(is_showcase);
 CREATE INDEX idx_characters_story ON characters(story_id);
 CREATE INDEX idx_pages_story ON story_pages(story_id);
 CREATE INDEX idx_pages_story_number ON story_pages(story_id, page_number);
+CREATE INDEX idx_ambient_story_page ON page_ambient_tracks(story_id, page_number);
 CREATE INDEX idx_sessions_story ON story_sessions(story_id);
 CREATE INDEX idx_sessions_user ON story_sessions(user_id);
 CREATE INDEX idx_sessions_story_user ON story_sessions(story_id, user_id);
@@ -191,6 +226,17 @@ ALTER TABLE user_bookmarks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can manage own bookmarks"
     ON user_bookmarks FOR ALL
     USING (user_id = auth.uid());
+
+-- page_ambient_tracks (public read, service-role write — ambient SFX are per-story, not per-user)
+ALTER TABLE page_ambient_tracks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view ambient tracks"
+    ON page_ambient_tracks FOR SELECT
+    USING (true);
+
+CREATE POLICY "Service role manages ambient tracks"
+    ON page_ambient_tracks FOR ALL
+    USING (true);
 
 -- ============================================
 -- STORAGE BUCKETS

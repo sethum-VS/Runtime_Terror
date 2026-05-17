@@ -16,7 +16,8 @@ STRUCTURE:
 - title: string
 - characters: array of {{ character_id, name, description, role, speaking_style, estimated_age, gender }}
   - role MUST be exactly one of (lowercase): protagonist, antagonist, supporting, narrator
-- pages: array of {{ page_number, segments }}
+- pages: array of {{ page_number, segments, ambient_setting }}
+  - ambient_setting: string (15-30 words) describing a SUBTLE MUSICAL ambient bed for audiobook narration — emotional tone, story genre feel, and instrumentation mood (e.g. soft piano pad, warm strings drone, sparse synth atmosphere). Instrumental only, no vocals, no drums, under dialogue. Example: "Melancholic slow piano and muted strings, intimate Victorian drama, gentle and distant, no percussion"
 - segments: array of {{ type, text, character_id?, emotion? }}
   - type is "narration" or "dialogue"
   - For dialogue include character_id and emotion
@@ -24,7 +25,9 @@ STRUCTURE:
 CRITICAL RULES:
 1. Do NOT change, add, or remove ANY words from the original story text in segment "text" fields.
 2. Preserve EXACT original wording (no paraphrasing). Escape double quotes inside strings as \\".
-3. Split pages at paragraph boundaries, NEVER mid-sentence. ~800-1000 characters per page.
+3. Split into listening pages (~1500-2000 characters each, max 2200). Do NOT mirror PDF page count.
+   A 12,000-character story should produce roughly 6-8 pages, NOT 3-4 huge chunks.
+   Split at paragraph boundaries, NEVER mid-sentence.
 4. Every piece of story text must appear in exactly one segment.
 5. Valid emotions: neutral, happy, sad, angry, scared, excited, whispering, laughing, crying.
 6. Always include character_id="narrator" for narration segments.
@@ -75,6 +78,7 @@ STORY_PARSE_SCHEMA = {
                             "required": ["type", "text"],
                         },
                     },
+                    "ambient_setting": {"type": "string"},
                 },
                 "required": ["page_number", "segments"],
             },
@@ -171,7 +175,82 @@ def _validate_and_normalize(result: dict) -> dict:
             if seg.get("type") == "dialogue" and not seg.get("emotion"):
                 seg["emotion"] = "neutral"
 
+    result["pages"] = _rebudget_pages_if_needed(result["pages"])
     return result
+
+
+TARGET_PAGE_CHARS = 1750
+MAX_PAGE_CHARS = 2200
+
+
+def _page_char_count(page: dict) -> int:
+    return sum(len(seg.get("text", "")) for seg in page.get("segments") or [])
+
+
+def _rebudget_pages_if_needed(pages: list[dict]) -> list[dict]:
+    """Re-split when the LLM returns too few oversized pages (common with long stories)."""
+    if not pages:
+        return pages
+
+    total_chars = sum(_page_char_count(p) for p in pages)
+    if total_chars < 500:
+        return pages
+
+    avg_chars = total_chars / len(pages)
+    expected_pages = max(1, round(total_chars / TARGET_PAGE_CHARS))
+    too_few_pages = len(pages) < expected_pages * 0.6
+    pages_too_long = avg_chars > MAX_PAGE_CHARS or any(
+        _page_char_count(p) > MAX_PAGE_CHARS for p in pages
+    )
+
+    if not too_few_pages and not pages_too_long:
+        return pages
+
+    print(
+        f"[story_parser] Re-splitting {len(pages)} pages "
+        f"(avg {int(avg_chars)} chars) -> target ~{expected_pages} pages"
+    )
+
+    flat_segments: list[dict] = []
+    for page in pages:
+        for seg in page.get("segments") or []:
+            text = (seg.get("text") or "").strip()
+            if text:
+                flat_segments.append(dict(seg))
+
+    if not flat_segments:
+        return pages
+
+    new_pages: list[dict] = []
+    bucket: list[dict] = []
+    char_count = 0
+    page_num = 1
+
+    for seg in flat_segments:
+        text_len = len(seg.get("text", ""))
+        if char_count + text_len > TARGET_PAGE_CHARS and bucket:
+            new_pages.append({
+                "page_number": page_num,
+                "segments": bucket,
+                "ambient_setting": "",
+            })
+            page_num += 1
+            bucket = []
+            char_count = 0
+        bucket.append(seg)
+        char_count += text_len
+
+    if bucket:
+        new_pages.append({
+            "page_number": page_num,
+            "segments": bucket,
+            "ambient_setting": "",
+        })
+
+    for i, page in enumerate(new_pages, start=1):
+        page["page_number"] = i
+
+    return new_pages
 
 
 def _fallback_parse(story_text: str) -> dict:
@@ -224,11 +303,15 @@ def _fallback_parse(story_text: str) -> dict:
     page_segments: list[dict] = []
     char_count = 0
     page_num = 1
-    target_chars = 900
+    target_chars = 1750
 
     for para in paragraphs:
         if char_count + len(para) > target_chars and page_segments:
-            pages.append({"page_number": page_num, "segments": page_segments})
+            pages.append({
+                "page_number": page_num,
+                "segments": page_segments,
+                "ambient_setting": "",
+            })
             page_num += 1
             page_segments = []
             char_count = 0
@@ -251,7 +334,11 @@ def _fallback_parse(story_text: str) -> dict:
         char_count += len(para)
 
     if page_segments:
-        pages.append({"page_number": page_num, "segments": page_segments})
+        pages.append({
+            "page_number": page_num,
+            "segments": page_segments,
+            "ambient_setting": "",
+        })
 
     return {
         "title": title[:200],

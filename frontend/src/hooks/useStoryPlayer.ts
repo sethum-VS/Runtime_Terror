@@ -465,6 +465,7 @@ export function useStoryPlayer({ storyId }: UseStoryPlayerArgs) {
     ) {
       nextPageRequestedRef.current = true;
       setNextPageStatus("generating");
+      api.generateAmbientTracks(storyId, currentPage + 1).catch(() => {});
       api
         .generatePage(storyId, currentPage + 1)
         .catch(() => {

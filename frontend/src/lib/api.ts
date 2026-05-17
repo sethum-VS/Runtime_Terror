@@ -8,6 +8,7 @@ import type {
   UserProfile,
   BookmarkEntry,
   ConversationStartResponse,
+  AmbientTracksResponse,
 } from "./types";
 
 // Relative /api/* calls are handled by `src/app/api/[...path]/route.ts`, which
@@ -169,6 +170,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ agent_id: agentId }),
     });
+  },
+
+  async getAmbientTracks(
+    storyId: string,
+    pageNum: number
+  ): Promise<AmbientTracksResponse> {
+    return jsonFetch<AmbientTracksResponse>(
+      `/api/stories/${storyId}/pages/${pageNum}/ambient`
+    );
+  },
+
+  async generateAmbientTracks(
+    storyId: string,
+    pageNum: number
+  ): Promise<AmbientTracksResponse> {
+    return jsonFetch<AmbientTracksResponse>(
+      `/api/stories/${storyId}/pages/${pageNum}/ambient/generate`,
+      { method: "POST" }
+    );
   },
 };
 

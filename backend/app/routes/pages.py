@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.dependencies import get_supabase
 from app.services.audio_generator import generate_page_audio
+from app.services.ambient_generator import generate_ambient_for_page
 from app.models.schemas import PageResponse, PageSummary
 
 router = APIRouter()
@@ -50,6 +51,7 @@ async def generate_page(story_id: str, page_num: int):
         return PageResponse(page_number=page_num, status="generating")
 
     asyncio.create_task(generate_page_audio(story_id, page_num))
+    asyncio.create_task(generate_ambient_for_page(story_id, page_num))
     return PageResponse(page_number=page_num, status="generating")
 
 

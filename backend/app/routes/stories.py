@@ -1,7 +1,7 @@
 import asyncio
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 
-from app.dependencies import get_supabase, get_current_user, get_required_user
+from app.dependencies import get_supabase, get_current_user, get_required_user, run_supabase
 from app.services.pdf_converter import convert_pdf_to_markdown
 from app.services.story_parser import parse_story
 from app.models.schemas import StoryResponse, CharacterResponse
@@ -91,6 +91,7 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
                 "page_number": page["page_number"],
                 "status": "idle",
                 "raw_segments": page.get("segments", []),
+                "ambient_setting": page.get("ambient_setting", ""),
             }).execute()
 
         supabase.table("stories").update({
@@ -109,11 +110,12 @@ async def _run_parsing_pipeline(story_id: str, md_text: str):
 
 
 async def _run_profiling(story_id: str):
-    """Profile characters, assign voices, then generate page 1."""
+    """Profile characters, assign voices, then generate page 1 audio + ambient."""
     supabase = get_supabase()
     try:
         from app.services.character_profiler import profile_characters_and_assign_voices
         from app.services.audio_generator import generate_page_audio
+        from app.services.ambient_generator import generate_ambient_for_page
 
         supabase.table("stories").update({"status": "profiling"}).eq("id", story_id).execute()
         await profile_characters_and_assign_voices(story_id)
@@ -121,7 +123,10 @@ async def _run_profiling(story_id: str):
         supabase.table("stories").update({"status": "profiled"}).eq("id", story_id).execute()
         supabase.table("stories").update({"status": "generating_page1"}).eq("id", story_id).execute()
 
-        await generate_page_audio(story_id, 1)
+        await asyncio.gather(
+            generate_page_audio(story_id, 1),
+            generate_ambient_for_page(story_id, 1),
+        )
 
         supabase.table("stories").update({"status": "ready"}).eq("id", story_id).execute()
     except Exception as e:
@@ -153,8 +158,9 @@ async def get_story(
     user: dict | None = Depends(get_current_user),
 ):
     """Get story status and metadata."""
-    supabase = get_supabase()
-    result = supabase.table("stories").select("*").eq("id", story_id).execute()
+    result = await run_supabase(
+        lambda: get_supabase().table("stories").select("*").eq("id", story_id).execute()
+    )
     if not result.data:
         raise HTTPException(404, "Story not found")
     story = result.data[0]
