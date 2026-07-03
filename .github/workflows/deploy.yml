@@ -1,6 +1,5 @@
-name: Deploy Backend to Cloud Run
+name: Deploy Backend to Heroku
 
-# prod = production branch in this repo (README). main kept for teams that use it.
 on:
   push:
     branches:
@@ -8,64 +7,22 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-  id-token: write   # Required for Workload Identity Federation
-
 jobs:
   deploy:
     name: Build, Push & Deploy
     runs-on: ubuntu-latest
-
-    env:
-      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:${{ github.sha }}
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud (WIF)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SA_EMAIL }}
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
-
-      - name: Build Docker image
-        working-directory: backend
+      - name: Deploy to Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
         run: |
-          docker build \
-            --tag "$IMAGE" \
-            --cache-from "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest" \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            .
-
-      - name: Push Docker image to Artifact Registry
-        run: docker push "$IMAGE"
-
-      - name: Tag image as latest
-        run: |
-          docker tag "$IMAGE" \
-            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest"
-          docker push \
-            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/backendtuntimeterror/backend-api:latest"
-
-      - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: backend-api
-          region: ${{ secrets.GCP_REGION }}
-          image: ${{ env.IMAGE }}
-          flags: --allow-unauthenticated
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
-            GOOGLE_CLOUD_REGION=${{ secrets.GCP_REGION }}
-            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
-            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-            SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-            SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
-            GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
-            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+          curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
+          heroku container:login
+          heroku stack:set container -a $HEROKU_APP_NAME
+          cd backend
+          heroku container:push web -a $HEROKU_APP_NAME
+          heroku container:release web -a $HEROKU_APP_NAME
